@@ -24,6 +24,19 @@ export default {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				
+				// Video tool colors
+				recording: {
+					DEFAULT: 'hsl(var(--recording))',
+					foreground: 'hsl(var(--recording-foreground))'
+				},
+				preview: 'hsl(var(--preview))',
+				controls: {
+					DEFAULT: 'hsl(var(--controls))',
+					foreground: 'hsl(var(--controls-foreground))'
+				},
+				'accent-glow': 'hsl(var(--accent-glow))',
+				'accent-soft': 'hsl(var(--accent-soft))',
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
 					foreground: 'hsl(var(--primary-foreground))'
@@ -70,25 +83,55 @@ export default {
 			},
 			keyframes: {
 				'accordion-down': {
-					from: {
-						height: '0'
-					},
-					to: {
-						height: 'var(--radix-accordion-content-height)'
-					}
+					from: { height: '0' },
+					to: { height: 'var(--radix-accordion-content-height)' }
 				},
 				'accordion-up': {
-					from: {
-						height: 'var(--radix-accordion-content-height)'
+					from: { height: 'var(--radix-accordion-content-height)' },
+					to: { height: '0' }
+				},
+				'pulse-glow': {
+					'0%, 100%': { 
+						boxShadow: '0 0 20px hsl(265 89% 70% / 0.3)',
+						transform: 'scale(1)'
 					},
-					to: {
-						height: '0'
+					'50%': { 
+						boxShadow: '0 0 40px hsl(265 89% 70% / 0.6)',
+						transform: 'scale(1.02)'
+					}
+				},
+				'recording-pulse': {
+					'0%, 100%': { 
+						backgroundColor: 'hsl(0 85% 58%)',
+						boxShadow: '0 0 20px hsl(0 85% 58% / 0.4)'
+					},
+					'50%': { 
+						backgroundColor: 'hsl(0 85% 68%)',
+						boxShadow: '0 0 40px hsl(0 85% 58% / 0.8)'
+					}
+				},
+				'zoom-smooth': {
+					'0%': { transform: 'scale(1)' },
+					'100%': { transform: 'scale(var(--zoom-target, 1.5))' }
+				},
+				'fade-slide-up': {
+					'0%': { 
+						opacity: '0',
+						transform: 'translateY(20px)'
+					},
+					'100%': { 
+						opacity: '1',
+						transform: 'translateY(0)'
 					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+				'recording-pulse': 'recording-pulse 1.5s ease-in-out infinite',
+				'zoom-smooth': 'zoom-smooth var(--zoom-duration, 0.5s) cubic-bezier(0.4, 0, 0.2, 1)',
+				'fade-slide-up': 'fade-slide-up 0.4s ease-out'
 			}
 		}
 	},

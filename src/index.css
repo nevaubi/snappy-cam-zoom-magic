@@ -2,14 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Video Recording Tool Design System - All colors MUST be HSL */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 240 6% 4%;
+    --foreground: 240 5% 96%;
+    
+    /* Video tool specific colors */
+    --recording: 0 85% 58%;
+    --recording-foreground: 0 0% 100%;
+    --preview: 240 5% 15%;
+    --controls: 240 4% 11%;
+    --controls-foreground: 240 5% 96%;
+    --accent-glow: 265 89% 70%;
+    --accent-soft: 265 89% 78%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(265 89% 70%), hsl(280 100% 75%));
+    --gradient-recording: linear-gradient(135deg, hsl(0 85% 58%), hsl(15 90% 60%));
+    --gradient-glass: linear-gradient(135deg, hsl(240 5% 15% / 0.8), hsl(240 5% 20% / 0.6));
+    
+    /* Shadows */
+    --shadow-glow: 0 0 40px hsl(265 89% 70% / 0.3);
+    --shadow-recording: 0 0 30px hsl(0 85% 58% / 0.4);
+    --shadow-elegant: 0 10px 40px -10px hsl(240 5% 0% / 0.5);
+    
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
