@@ -13,23 +13,41 @@ export interface VideoProcessingOptions {
   quality?: 'high' | 'medium' | 'low';
 }
 
+// Singleton FFmpeg instance
+let ffmpegInstance: FFmpeg | null = null;
+let isFFmpegLoaded = false;
+let loadingPromise: Promise<void> | null = null;
+
 export const useVideoProcessor = () => {
-  const ffmpegRef = useRef<FFmpeg | null>(null);
-  const isLoadedRef = useRef(false);
-
   const loadFFmpeg = useCallback(async () => {
-    if (isLoadedRef.current) return;
+    if (isFFmpegLoaded && ffmpegInstance) return;
+    
+    if (loadingPromise) {
+      await loadingPromise;
+      return;
+    }
 
-    const ffmpeg = new FFmpeg();
-    ffmpegRef.current = ffmpeg;
+    loadingPromise = (async () => {
+      try {
+        console.log('Loading FFmpeg...');
+        const ffmpeg = new FFmpeg();
+        ffmpegInstance = ffmpeg;
 
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
 
-    isLoadedRef.current = true;
+        isFFmpegLoaded = true;
+        console.log('FFmpeg loaded successfully');
+      } catch (error) {
+        console.error('FFmpeg loading failed:', error);
+        throw error;
+      }
+    })();
+
+    await loadingPromise;
   }, []);
 
   const processVideo = useCallback(async (
@@ -38,7 +56,8 @@ export const useVideoProcessor = () => {
     onProgress?: (progress: number) => void
   ): Promise<Blob> => {
     await loadFFmpeg();
-    const ffmpeg = ffmpegRef.current!;
+    if (!ffmpegInstance) throw new Error('FFmpeg not loaded');
+    const ffmpeg = ffmpegInstance;
 
     // Write input video to FFmpeg
     await ffmpeg.writeFile('input.webm', await fetchFile(videoBlob));
@@ -114,7 +133,8 @@ export const useVideoProcessor = () => {
 
   const extractThumbnail = useCallback(async (videoBlob: Blob, timeSeconds: number = 0): Promise<string> => {
     await loadFFmpeg();
-    const ffmpeg = ffmpegRef.current!;
+    if (!ffmpegInstance) throw new Error('FFmpeg not loaded');
+    const ffmpeg = ffmpegInstance;
 
     await ffmpeg.writeFile('input.webm', await fetchFile(videoBlob));
     

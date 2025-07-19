@@ -123,4 +123,47 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Video Recorder Animations */
+  @keyframes recording-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+
+  .animate-recording-pulse {
+    animation: recording-pulse 1.5s ease-in-out infinite;
+  }
+
+  /* Custom Background Classes for Video Tool */
+  .bg-controls {
+    background-color: hsl(var(--controls));
+  }
+  
+  .text-controls-foreground {
+    color: hsl(var(--controls-foreground));
+  }
+  
+  .bg-preview {
+    background-color: hsl(var(--preview));
+  }
+  
+  .bg-accent-glow {
+    background-color: hsl(var(--accent-glow));
+  }
+  
+  .bg-accent-soft {
+    background-color: hsl(var(--accent-soft));
+  }
+  
+  .bg-recording {
+    background-color: hsl(var(--recording));
+  }
+  
+  .text-accent-glow {
+    color: hsl(var(--accent-glow));
+  }
+  
+  .border-accent-glow {
+    border-color: hsl(var(--accent-glow));
+  }
 }

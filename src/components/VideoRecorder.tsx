@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
 import { useVideoProcessor } from '@/hooks/useVideoProcessor';
 import { VideoTimeline } from './VideoTimeline';
+import { StreamManager, drawRoundedRect } from '@/utils/StreamManager';
 
 interface RecordingConfig {
   webcamEnabled: boolean;
@@ -48,13 +49,11 @@ const VideoRecorder = () => {
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
-  const webcamStreamRef = useRef<MediaStream | null>(null);
-  const screenVideoRef = useRef<HTMLVideoElement>(null);
-  const webcamVideoRef = useRef<HTMLVideoElement>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
   const animationFrameRef = useRef<number>();
+  const streamManagerRef = useRef<StreamManager>(new StreamManager());
+  const [isStreamReady, setIsStreamReady] = useState(false);
 
   const [config, setConfig] = useState<RecordingConfig>({
     webcamEnabled: true,
@@ -86,54 +85,33 @@ const VideoRecorder = () => {
     loadFFmpeg();
   }, [loadFFmpeg]);
 
-  // Initialize video elements for streams
-  const initializeVideoElements = useCallback(async () => {
+  // Initialize streams using StreamManager
+  const initializeStreams = useCallback(async () => {
     try {
-      // Create video elements if they don't exist
-      if (!screenVideoRef.current) {
-        screenVideoRef.current = document.createElement('video');
-        screenVideoRef.current.muted = true;
-        screenVideoRef.current.autoplay = true;
-        screenVideoRef.current.playsInline = true;
-      }
+      setIsStreamReady(false);
       
-      if (!webcamVideoRef.current) {
-        webcamVideoRef.current = document.createElement('video');
-        webcamVideoRef.current.muted = true;
-        webcamVideoRef.current.autoplay = true;
-        webcamVideoRef.current.playsInline = true;
-      }
-
-      const promises = [];
-
-      if (config.screenEnabled && screenStreamRef.current && screenVideoRef.current) {
-        screenVideoRef.current.srcObject = screenStreamRef.current;
-        promises.push(new Promise((resolve) => {
-          screenVideoRef.current!.addEventListener('canplay', resolve, { once: true });
-          screenVideoRef.current!.play();
-        }));
-      }
+      await streamManagerRef.current.initializeStreams({
+        webcamEnabled: config.webcamEnabled,
+        screenEnabled: config.screenEnabled
+      });
       
-      if (config.webcamEnabled && webcamStreamRef.current && webcamVideoRef.current) {
-        webcamVideoRef.current.srcObject = webcamStreamRef.current;
-        promises.push(new Promise((resolve) => {
-          webcamVideoRef.current!.addEventListener('canplay', resolve, { once: true });
-          webcamVideoRef.current!.play();
-        }));
-      }
-
-      await Promise.all(promises);
-    } catch (error) {
-      console.error('Error initializing video elements:', error);
+      setIsStreamReady(true);
+      
       toast({
-        title: "Video Initialization Error",
-        description: "Failed to setup video streams"
+        title: "Streams Ready",
+        description: "Video streams initialized successfully!"
+      });
+    } catch (error) {
+      console.error('Error initializing streams:', error);
+      toast({
+        title: "Stream Error",
+        description: error instanceof Error ? error.message : "Failed to initialize video streams"
       });
     }
   }, [config.screenEnabled, config.webcamEnabled]);
 
   // Canvas composition for recording
-  const setupCanvas = useCallback(async () => {
+  const setupCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -144,6 +122,8 @@ const VideoRecorder = () => {
     canvas.height = 1080;
 
     const compositeStreams = () => {
+      if (!streamManagerRef.current.isReady()) return;
+
       try {
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -159,38 +139,38 @@ const VideoRecorder = () => {
           ctx.fillStyle = gradient;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
+
+        // Draw screen capture
+        const screenVideo = streamManagerRef.current.getScreenVideo();
+        if (config.screenEnabled && screenVideo && screenVideo.readyState >= 3) {
+          ctx.save();
+          const radius = config.videoRoundness;
+          if (radius > 0) {
+            drawRoundedRect(ctx, 0, 0, canvas.width, canvas.height, radius);
+            ctx.clip();
+          }
+          ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
+        }
+
+        // Draw webcam
+        const webcamVideo = streamManagerRef.current.getWebcamVideo();
+        if (config.webcamEnabled && webcamVideo && webcamVideo.readyState >= 3) {
+          const size = (config.webcamSize / 100) * Math.min(canvas.width, canvas.height) * 0.3;
+          const x = (config.webcamX / 100) * (canvas.width - size);
+          const y = (config.webcamY / 100) * (canvas.height - size);
+          
+          ctx.save();
+          const radius = (config.roundness / 100) * (size / 2);
+          if (radius > 0) {
+            drawRoundedRect(ctx, x, y, size, size, radius);
+            ctx.clip();
+          }
+          ctx.drawImage(webcamVideo, x, y, size, size);
+          ctx.restore();
+        }
       } catch (error) {
         console.error('Canvas composition error:', error);
-      }
-
-      // Draw screen capture
-      if (config.screenEnabled && screenVideoRef.current && screenVideoRef.current.readyState >= 3) {
-        ctx.save();
-        const radius = config.videoRoundness;
-        if (radius > 0) {
-          ctx.beginPath();
-          ctx.roundRect(0, 0, canvas.width, canvas.height, radius);
-          ctx.clip();
-        }
-        ctx.drawImage(screenVideoRef.current, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
-      }
-
-      // Draw webcam
-      if (config.webcamEnabled && webcamVideoRef.current && webcamVideoRef.current.readyState >= 3) {
-        const size = (config.webcamSize / 100) * Math.min(canvas.width, canvas.height) * 0.3;
-        const x = (config.webcamX / 100) * (canvas.width - size);
-        const y = (config.webcamY / 100) * (canvas.height - size);
-        
-        ctx.save();
-        const radius = (config.roundness / 100) * (size / 2);
-        if (radius > 0) {
-          ctx.beginPath();
-          ctx.roundRect(x, y, size, size, radius);
-          ctx.clip();
-        }
-        ctx.drawImage(webcamVideoRef.current, x, y, size, size);
-        ctx.restore();
       }
 
       if (isRecording) {
@@ -198,55 +178,21 @@ const VideoRecorder = () => {
       }
     };
 
-    await initializeVideoElements();
     compositeStreams();
-  }, [isRecording, config, initializeVideoElements]);
+  }, [isRecording, config, isStreamReady]);
 
   const startRecording = async () => {
+    if (!isStreamReady) {
+      toast({
+        title: "Streams Not Ready",
+        description: "Please wait for video streams to initialize"
+      });
+      return;
+    }
+
     try {
       setIsRecording(true);
       
-      // Get screen capture
-      if (config.screenEnabled) {
-        try {
-          screenStreamRef.current = await navigator.mediaDevices.getDisplayMedia({
-            video: { width: 1920, height: 1080, frameRate: 30 },
-            audio: true
-          });
-        } catch (screenError) {
-          console.error('Screen capture failed:', screenError);
-          setIsRecording(false);
-          if (screenError instanceof DOMException && screenError.name === 'NotAllowedError') {
-            toast({
-              title: "Permission Denied",
-              description: "Screen recording permission was denied. Please allow access and try again."
-            });
-          } else {
-            toast({
-              title: "Screen Capture Error",
-              description: "Failed to capture screen. Please try again."
-            });
-          }
-          return;
-        }
-      }
-
-      // Get webcam
-      if (config.webcamEnabled) {
-        try {
-          webcamStreamRef.current = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480, frameRate: 30 },
-            audio: false
-          });
-        } catch (webcamError) {
-          console.warn('Webcam access failed:', webcamError);
-          toast({
-            title: "Webcam Warning",
-            description: "Webcam access denied, continuing with screen only"
-          });
-        }
-      }
-
       // Setup canvas recording
       const canvas = canvasRef.current;
       if (!canvas) {
@@ -254,13 +200,14 @@ const VideoRecorder = () => {
         return;
       }
 
-      await setupCanvas();
+      setupCanvas();
       
       const stream = canvas.captureStream(30);
       
       // Add audio from screen if available
-      if (screenStreamRef.current) {
-        const audioTracks = screenStreamRef.current.getAudioTracks();
+      const screenStream = streamManagerRef.current.getScreenStream();
+      if (screenStream) {
+        const audioTracks = screenStream.getAudioTracks();
         audioTracks.forEach(track => stream.addTrack(track));
       }
 
@@ -274,7 +221,6 @@ const VideoRecorder = () => {
       }
 
       mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
-
       recordedChunksRef.current = [];
 
       mediaRecorderRef.current.ondataavailable = (event) => {
@@ -289,7 +235,6 @@ const VideoRecorder = () => {
         setRecordedVideoUrl(url);
         
         try {
-          // Get video duration for timeline
           const duration = await getVideoDuration(blob);
           setEditorState(prev => ({ ...prev, duration, trimEnd: duration }));
         } catch (durationError) {
@@ -300,7 +245,7 @@ const VideoRecorder = () => {
         setActiveTab('edit');
       };
 
-      mediaRecorderRef.current.start(1000); // Record in 1-second chunks
+      mediaRecorderRef.current.start(1000);
       
       toast({
         title: "Recording Started",
@@ -327,12 +272,9 @@ const VideoRecorder = () => {
         cancelAnimationFrame(animationFrameRef.current);
       }
       
-      // Stop all streams
-      [screenStreamRef.current, webcamStreamRef.current].forEach(stream => {
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-        }
-      });
+      // Clean up streams
+      streamManagerRef.current.cleanup();
+      setIsStreamReady(false);
       
       toast({
         title: "Recording Stopped",
@@ -614,10 +556,13 @@ const VideoRecorder = () => {
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       variant={config.screenEnabled ? 'default' : 'outline'}
-                      onClick={() => setConfig(prev => ({ ...prev, screenEnabled: !prev.screenEnabled }))}
+                      onClick={() => {
+                        setConfig(prev => ({ ...prev, screenEnabled: !prev.screenEnabled }));
+                        setIsStreamReady(false);
+                      }}
                       size="sm"
                     >
                       <Monitor className="w-4 h-4 mr-1" />
@@ -625,7 +570,10 @@ const VideoRecorder = () => {
                     </Button>
                     <Button
                       variant={config.webcamEnabled ? 'default' : 'outline'}
-                      onClick={() => setConfig(prev => ({ ...prev, webcamEnabled: !prev.webcamEnabled }))}
+                      onClick={() => {
+                        setConfig(prev => ({ ...prev, webcamEnabled: !prev.webcamEnabled }));
+                        setIsStreamReady(false);
+                      }}
                       size="sm"
                     >
                       <Camera className="w-4 h-4 mr-1" />
@@ -952,9 +900,72 @@ const VideoRecorder = () => {
           </div>
         )}
 
-        {/* Hidden video elements for canvas composition */}
-        <video ref={screenVideoRef} className="hidden" muted />
-        <video ref={webcamVideoRef} className="hidden" muted />
+        {/* Live Preview Area */}
+        <div className="space-y-4">
+          {/* Initialize Streams Button */}
+          {!isStreamReady && (
+            <Card className="bg-controls border-0 p-4">
+              <Button 
+                onClick={initializeStreams}
+                className="w-full bg-accent-glow hover:bg-accent-glow/90"
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                Initialize Camera & Screen
+              </Button>
+            </Card>
+          )}
+          
+          {/* Stream Status */}
+          {isStreamReady && (
+            <Card className="bg-controls border-0 p-4">
+              <div className="flex items-center gap-2 text-accent-glow">
+                <div className="w-2 h-2 bg-accent-glow rounded-full animate-pulse" />
+                <span className="text-sm font-medium">Streams Ready</span>
+              </div>
+            </Card>
+          )}
+          
+          {/* Preview Windows */}
+          {isStreamReady && (
+            <div className="grid grid-cols-2 gap-4">
+              {streamManagerRef.current.getScreenVideo() && (
+                <Card className="bg-preview border-0 p-2">
+                  <div className="text-xs text-foreground/70 mb-1">Screen</div>
+                  <video 
+                    ref={(ref) => {
+                      if (ref && streamManagerRef.current.getScreenStream()) {
+                        ref.srcObject = streamManagerRef.current.getScreenStream();
+                        ref.play();
+                      }
+                    }}
+                    className="w-full aspect-video object-cover rounded" 
+                    muted 
+                    autoPlay 
+                    playsInline 
+                  />
+                </Card>
+              )}
+              
+              {streamManagerRef.current.getWebcamVideo() && (
+                <Card className="bg-preview border-0 p-2">
+                  <div className="text-xs text-foreground/70 mb-1">Webcam</div>
+                  <video 
+                    ref={(ref) => {
+                      if (ref && streamManagerRef.current.getWebcamStream()) {
+                        ref.srcObject = streamManagerRef.current.getWebcamStream();
+                        ref.play();
+                      }
+                    }}
+                    className="w-full aspect-video object-cover rounded" 
+                    muted 
+                    autoPlay 
+                    playsInline 
+                  />
+                </Card>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
