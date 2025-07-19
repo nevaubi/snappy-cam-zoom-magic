@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Square, Camera, Monitor, Download, ZoomIn, ZoomOut, Upload, Settings, Crop, Scissors } from 'lucide-react';
+import { Play, Square, Camera, Monitor, Download, ZoomIn, ZoomOut, Upload, Settings, Crop, Scissors, Pause, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
+import { useVideoProcessor } from '@/hooks/useVideoProcessor';
+import { VideoTimeline } from './VideoTimeline';
 
 interface RecordingConfig {
   webcamEnabled: boolean;
@@ -25,21 +28,33 @@ interface VideoEditorState {
   cropHeight: number;
   trimStart: number;
   trimEnd: number;
+  currentTime: number;
+  duration: number;
+  isPlaying: boolean;
 }
 
 const VideoRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
+  const [processedVideoUrl, setProcessedVideoUrl] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0);
   const [activeTab, setActiveTab] = useState<'record' | 'edit'>('record');
   
+  const { processVideo, getVideoDuration, loadFFmpeg } = useVideoProcessor();
+  
   const videoRef = useRef<HTMLVideoElement>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const webcamStreamRef = useRef<MediaStream | null>(null);
+  const screenVideoRef = useRef<HTMLVideoElement>(null);
+  const webcamVideoRef = useRef<HTMLVideoElement>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
+  const animationFrameRef = useRef<number>();
 
   const [config, setConfig] = useState<RecordingConfig>({
     webcamEnabled: true,
@@ -60,8 +75,31 @@ const VideoRecorder = () => {
     cropWidth: 100,
     cropHeight: 100,
     trimStart: 0,
-    trimEnd: 100
+    trimEnd: 100,
+    currentTime: 0,
+    duration: 0,
+    isPlaying: false
   });
+
+  // Initialize FFmpeg when component mounts
+  useEffect(() => {
+    loadFFmpeg();
+  }, [loadFFmpeg]);
+
+  // Initialize video elements for streams
+  const initializeVideoElements = useCallback(async () => {
+    if (config.screenEnabled && screenStreamRef.current && screenVideoRef.current) {
+      screenVideoRef.current.srcObject = screenStreamRef.current;
+      screenVideoRef.current.muted = true;
+      await screenVideoRef.current.play();
+    }
+    
+    if (config.webcamEnabled && webcamStreamRef.current && webcamVideoRef.current) {
+      webcamVideoRef.current.srcObject = webcamStreamRef.current;
+      webcamVideoRef.current.muted = true;
+      await webcamVideoRef.current.play();
+    }
+  }, [config.screenEnabled, config.webcamEnabled]);
 
   // Canvas composition for recording
   const setupCanvas = useCallback(async () => {
@@ -74,7 +112,7 @@ const VideoRecorder = () => {
     canvas.width = 1920;
     canvas.height = 1080;
 
-    const compositeStreams = async () => {
+    const compositeStreams = () => {
       if (!isRecording) return;
 
       // Clear canvas
@@ -93,47 +131,43 @@ const VideoRecorder = () => {
       }
 
       // Draw screen capture
-      if (config.screenEnabled && screenStreamRef.current) {
-        const video = document.createElement('video');
-        video.srcObject = screenStreamRef.current;
-        if (video.readyState >= 2) {
-          ctx.save();
-          const radius = (config.videoRoundness / 100) * 50;
-          const roundRect = (x: number, y: number, w: number, h: number, r: number) => {
-            ctx.beginPath();
-            ctx.roundRect(x, y, w, h, r);
-            ctx.clip();
-          };
-          roundRect(0, 0, canvas.width, canvas.height, radius);
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          ctx.restore();
+      if (config.screenEnabled && screenVideoRef.current && screenVideoRef.current.readyState >= 2) {
+        ctx.save();
+        const radius = config.videoRoundness;
+        if (radius > 0) {
+          ctx.beginPath();
+          ctx.roundRect(0, 0, canvas.width, canvas.height, radius);
+          ctx.clip();
         }
+        ctx.drawImage(screenVideoRef.current, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
       }
 
       // Draw webcam
-      if (config.webcamEnabled && webcamStreamRef.current) {
-        const video = document.createElement('video');
-        video.srcObject = webcamStreamRef.current;
-        if (video.readyState >= 2) {
-          const size = (config.webcamSize / 100) * Math.min(canvas.width, canvas.height) * 0.3;
-          const x = (config.webcamX / 100) * (canvas.width - size);
-          const y = (config.webcamY / 100) * (canvas.height - size);
-          
-          ctx.save();
-          const radius = (config.roundness / 100) * (size / 2);
+      if (config.webcamEnabled && webcamVideoRef.current && webcamVideoRef.current.readyState >= 2) {
+        const size = (config.webcamSize / 100) * Math.min(canvas.width, canvas.height) * 0.3;
+        const x = (config.webcamX / 100) * (canvas.width - size);
+        const y = (config.webcamY / 100) * (canvas.height - size);
+        
+        ctx.save();
+        const radius = (config.roundness / 100) * (size / 2);
+        if (radius > 0) {
           ctx.beginPath();
           ctx.roundRect(x, y, size, size, radius);
           ctx.clip();
-          ctx.drawImage(video, x, y, size, size);
-          ctx.restore();
         }
+        ctx.drawImage(webcamVideoRef.current, x, y, size, size);
+        ctx.restore();
       }
 
-      requestAnimationFrame(compositeStreams);
+      if (isRecording) {
+        animationFrameRef.current = requestAnimationFrame(compositeStreams);
+      }
     };
 
+    await initializeVideoElements();
     compositeStreams();
-  }, [isRecording, config]);
+  }, [isRecording, config, initializeVideoElements]);
 
   const startRecording = async () => {
     try {
@@ -157,6 +191,8 @@ const VideoRecorder = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
+      await setupCanvas();
+      
       const stream = canvas.captureStream(60);
       
       // Add audio from screen if available
@@ -164,8 +200,6 @@ const VideoRecorder = () => {
         const audioTracks = screenStreamRef.current.getAudioTracks();
         audioTracks.forEach(track => stream.addTrack(track));
       }
-
-      setupCanvas();
 
       mediaRecorderRef.current = new MediaRecorder(stream, {
         mimeType: 'video/webm;codecs=vp9'
@@ -179,10 +213,15 @@ const VideoRecorder = () => {
         }
       };
 
-      mediaRecorderRef.current.onstop = () => {
+      mediaRecorderRef.current.onstop = async () => {
         const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
         const url = URL.createObjectURL(blob);
         setRecordedVideoUrl(url);
+        
+        // Get video duration for timeline
+        const duration = await getVideoDuration(blob);
+        setEditorState(prev => ({ ...prev, duration, trimEnd: duration }));
+        
         setActiveTab('edit');
       };
 
@@ -207,6 +246,11 @@ const VideoRecorder = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      
+      // Cancel animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
       
       // Stop all streams
       [screenStreamRef.current, webcamStreamRef.current].forEach(stream => {
@@ -239,9 +283,10 @@ const VideoRecorder = () => {
   };
 
   const downloadVideo = () => {
-    if (recordedVideoUrl) {
+    const videoUrl = processedVideoUrl || recordedVideoUrl;
+    if (videoUrl) {
       const a = document.createElement('a');
-      a.href = recordedVideoUrl;
+      a.href = videoUrl;
       a.download = `recording-${Date.now()}.webm`;
       a.click();
       
@@ -252,12 +297,121 @@ const VideoRecorder = () => {
     }
   };
 
-  const applyZoom = (zoomLevel: number) => {
-    if (videoRef.current) {
-      videoRef.current.style.transform = `scale(${zoomLevel})`;
-      videoRef.current.style.transition = `transform ${editorState.zoomSpeed}s cubic-bezier(0.4, 0, 0.2, 1)`;
+  const applyVideoProcessing = async () => {
+    if (!recordedVideoUrl) return;
+    
+    setIsProcessing(true);
+    setProcessingProgress(0);
+    
+    try {
+      const response = await fetch(recordedVideoUrl);
+      const blob = await response.blob();
+      
+      const processedBlob = await processVideo(blob, {
+        zoom: editorState.zoom,
+        cropX: editorState.cropX,
+        cropY: editorState.cropY,
+        cropWidth: editorState.cropWidth,
+        cropHeight: editorState.cropHeight,
+        trimStart: editorState.trimStart,
+        trimEnd: editorState.trimEnd,
+        quality: 'high'
+      }, (progress) => {
+        setProcessingProgress(progress);
+      });
+      
+      const processedUrl = URL.createObjectURL(processedBlob);
+      setProcessedVideoUrl(processedUrl);
+      
+      toast({
+        title: "Processing Complete",
+        description: "Your video has been processed successfully!"
+      });
+    } catch (error) {
+      console.error('Video processing error:', error);
+      toast({
+        title: "Processing Error",
+        description: "Failed to process video. Please try again."
+      });
+    } finally {
+      setIsProcessing(false);
+      setProcessingProgress(0);
     }
   };
+
+  const resetEditing = () => {
+    setEditorState(prev => ({
+      ...prev,
+      zoom: 1,
+      cropX: 0,
+      cropY: 0,
+      cropWidth: 100,
+      cropHeight: 100,
+      trimStart: 0,
+      trimEnd: prev.duration
+    }));
+    
+    if (processedVideoUrl) {
+      URL.revokeObjectURL(processedVideoUrl);
+      setProcessedVideoUrl(null);
+    }
+  };
+
+  const applyZoom = (zoomLevel: number) => {
+    if (previewVideoRef.current) {
+      previewVideoRef.current.style.transform = `scale(${zoomLevel})`;
+      previewVideoRef.current.style.transition = `transform ${editorState.zoomSpeed}s cubic-bezier(0.4, 0, 0.2, 1)`;
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (previewVideoRef.current) {
+      if (editorState.isPlaying) {
+        previewVideoRef.current.pause();
+      } else {
+        previewVideoRef.current.play();
+      }
+      setEditorState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (previewVideoRef.current) {
+      setEditorState(prev => ({
+        ...prev,
+        currentTime: previewVideoRef.current!.currentTime
+      }));
+    }
+  };
+
+  const handleCurrentTimeChange = (time: number) => {
+    if (previewVideoRef.current) {
+      previewVideoRef.current.currentTime = time;
+      setEditorState(prev => ({ ...prev, currentTime: time }));
+    }
+  };
+
+  const handleTrimChange = (start: number, end: number) => {
+    setEditorState(prev => ({ ...prev, trimStart: start, trimEnd: end }));
+  };
+
+  // Set up video event listeners
+  useEffect(() => {
+    const video = previewVideoRef.current;
+    if (video) {
+      video.addEventListener('timeupdate', handleTimeUpdate);
+      return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+    }
+  }, [processedVideoUrl || recordedVideoUrl]);
+
+  // Hidden video elements for canvas composition
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -492,41 +646,92 @@ const VideoRecorder = () => {
           </div>
         )}
 
-        {/* Editing Tab */}
+        {/* Edit Tab */}
         {activeTab === 'edit' && recordedVideoUrl && (
-          <div className="grid lg:grid-cols-3 gap-8">
+          <div className="space-y-8">
             {/* Video Preview */}
-            <div className="lg:col-span-2">
-              <Card className="bg-preview border-0 overflow-hidden">
-                <div className="aspect-video relative">
-                  <video
-                    ref={videoRef}
-                    src={recordedVideoUrl}
-                    controls
-                    className="w-full h-full object-cover"
-                    style={{
-                      transform: `scale(${editorState.zoom})`,
-                      transformOrigin: 'center',
-                      transition: `transform ${editorState.zoomSpeed}s cubic-bezier(0.4, 0, 0.2, 1)`
-                    }}
-                  />
-                </div>
-              </Card>
-            </div>
+            <Card className="bg-preview border-0 overflow-hidden">
+              <div className="aspect-video relative bg-black">
+                <video
+                  ref={previewVideoRef}
+                  src={processedVideoUrl || recordedVideoUrl}
+                  className="w-full h-full object-contain"
+                  style={{
+                    transform: `scale(${editorState.zoom})`,
+                    transformOrigin: 'center center',
+                    transition: `transform ${editorState.zoomSpeed}s cubic-bezier(0.4, 0, 0.2, 1)`
+                  }}
+                />
+                
+                {/* Processing overlay */}
+                {isProcessing && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <div className="bg-controls p-6 rounded-lg text-center">
+                      <div className="text-controls-foreground mb-2">Processing Video...</div>
+                      <Progress value={processingProgress} className="w-48" />
+                      <div className="text-sm text-controls-foreground/70 mt-2">
+                        {Math.round(processingProgress)}%
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
 
-            {/* Edit Controls */}
-            <div className="space-y-6">
+            {/* Timeline */}
+            {editorState.duration > 0 && (
+              <VideoTimeline
+                videoUrl={processedVideoUrl || recordedVideoUrl}
+                duration={editorState.duration}
+                currentTime={editorState.currentTime}
+                trimStart={editorState.trimStart}
+                trimEnd={editorState.trimEnd}
+                onCurrentTimeChange={handleCurrentTimeChange}
+                onTrimChange={handleTrimChange}
+                onPlayPause={handlePlayPause}
+                isPlaying={editorState.isPlaying}
+              />
+            )}
+
+            {/* Editing Controls */}
+            <div className="grid lg:grid-cols-4 gap-6">
               {/* Zoom Controls */}
               <Card className="bg-controls border-0 p-6">
-                <h3 className="text-lg font-semibold text-controls-foreground mb-4">Zoom & Pan</h3>
+                <h3 className="text-lg font-semibold text-controls-foreground mb-4">Zoom</h3>
                 <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        const newZoom = Math.max(0.5, editorState.zoom - 0.1);
+                        setEditorState(prev => ({ ...prev, zoom: newZoom }));
+                      }}
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <ZoomOut className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const newZoom = Math.min(3, editorState.zoom + 0.1);
+                        setEditorState(prev => ({ ...prev, zoom: newZoom }));
+                      }}
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  
                   <div>
-                    <label className="text-sm text-controls-foreground/70 mb-2 block">Zoom: {editorState.zoom.toFixed(1)}x</label>
+                    <label className="text-sm text-controls-foreground/70 mb-2 block">
+                      Level: {editorState.zoom.toFixed(1)}x
+                    </label>
                     <Slider
                       value={[editorState.zoom]}
                       onValueChange={([value]) => {
                         setEditorState(prev => ({ ...prev, zoom: value }));
-                        applyZoom(value);
                       }}
                       max={3}
                       min={0.5}
@@ -536,7 +741,9 @@ const VideoRecorder = () => {
                   </div>
                   
                   <div>
-                    <label className="text-sm text-controls-foreground/70 mb-2 block">Zoom Speed: {editorState.zoomSpeed}s</label>
+                    <label className="text-sm text-controls-foreground/70 mb-2 block">
+                      Speed: {editorState.zoomSpeed}s
+                    </label>
                     <Slider
                       value={[editorState.zoomSpeed]}
                       onValueChange={([value]) => setEditorState(prev => ({ ...prev, zoomSpeed: value }))}
@@ -546,99 +753,109 @@ const VideoRecorder = () => {
                       className="w-full"
                     />
                   </div>
-                  
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      onClick={() => {
-                        const newZoom = Math.max(0.5, editorState.zoom - 0.2);
-                        setEditorState(prev => ({ ...prev, zoom: newZoom }));
-                        applyZoom(newZoom);
-                      }}
-                      variant="outline"
-                      size="sm"
-                    >
-                      <ZoomOut className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setEditorState(prev => ({ ...prev, zoom: 1 }));
-                        applyZoom(1);
-                      }}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Reset
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        const newZoom = Math.min(3, editorState.zoom + 0.2);
-                        setEditorState(prev => ({ ...prev, zoom: newZoom }));
-                        applyZoom(newZoom);
-                      }}
-                      variant="outline"
-                      size="sm"
-                    >
-                      <ZoomIn className="w-4 h-4" />
-                    </Button>
-                  </div>
                 </div>
               </Card>
 
-              {/* Basic Editing */}
+              {/* Crop Controls */}
               <Card className="bg-controls border-0 p-6">
-                <h3 className="text-lg font-semibold text-controls-foreground mb-4">Basic Editing</h3>
+                <h3 className="text-lg font-semibold text-controls-foreground mb-4">Crop</h3>
                 <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-controls-foreground/70 mb-2 block">Trim Start: {editorState.trimStart}%</label>
-                    <Slider
-                      value={[editorState.trimStart]}
-                      onValueChange={([value]) => setEditorState(prev => ({ ...prev, trimStart: value }))}
-                      max={50}
-                      min={0}
-                      step={1}
-                      className="w-full"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm text-controls-foreground/70 mb-2 block">Trim End: {editorState.trimEnd}%</label>
-                    <Slider
-                      value={[editorState.trimEnd]}
-                      onValueChange={([value]) => setEditorState(prev => ({ ...prev, trimEnd: value }))}
-                      max={100}
-                      min={50}
-                      step={1}
-                      className="w-full"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-sm text-controls-foreground/70 mb-1 block">X: {editorState.cropX}%</label>
+                      <Slider
+                        value={[editorState.cropX]}
+                        onValueChange={([value]) => setEditorState(prev => ({ ...prev, cropX: value }))}
+                        max={50}
+                        min={0}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-controls-foreground/70 mb-1 block">Y: {editorState.cropY}%</label>
+                      <Slider
+                        value={[editorState.cropY]}
+                        onValueChange={([value]) => setEditorState(prev => ({ ...prev, cropY: value }))}
+                        max={50}
+                        min={0}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="sm">
-                      <Crop className="w-4 h-4 mr-1" />
-                      Crop
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      <Scissors className="w-4 h-4 mr-1" />
-                      Trim
-                    </Button>
+                    <div>
+                      <label className="text-sm text-controls-foreground/70 mb-1 block">W: {editorState.cropWidth}%</label>
+                      <Slider
+                        value={[editorState.cropWidth]}
+                        onValueChange={([value]) => setEditorState(prev => ({ ...prev, cropWidth: value }))}
+                        max={100}
+                        min={10}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-controls-foreground/70 mb-1 block">H: {editorState.cropHeight}%</label>
+                      <Slider
+                        value={[editorState.cropHeight]}
+                        onValueChange={([value]) => setEditorState(prev => ({ ...prev, cropHeight: value }))}
+                        max={100}
+                        min={10}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
                   </div>
                 </div>
               </Card>
 
-              {/* Export */}
+              {/* Processing Controls */}
+              <Card className="bg-controls border-0 p-6">
+                <h3 className="text-lg font-semibold text-controls-foreground mb-4">Process</h3>
+                <div className="space-y-3">
+                  <Button
+                    onClick={applyVideoProcessing}
+                    disabled={isProcessing}
+                    className="w-full bg-accent-glow hover:bg-accent-glow/90"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Apply Effects
+                  </Button>
+                  
+                  <Button
+                    onClick={resetEditing}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Reset
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Export Controls */}
               <Card className="bg-controls border-0 p-6">
                 <h3 className="text-lg font-semibold text-controls-foreground mb-4">Export</h3>
-                <Button 
-                  onClick={downloadVideo}
-                  className="w-full bg-gradient-to-r from-accent-glow to-accent-soft hover:opacity-90"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Video
-                </Button>
+                <div className="space-y-3">
+                  <Button
+                    onClick={downloadVideo}
+                    className="w-full bg-gradient-to-r from-accent-glow to-accent-soft hover:opacity-90"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                </div>
               </Card>
             </div>
           </div>
         )}
+
+        {/* Hidden video elements for canvas composition */}
+        <video ref={screenVideoRef} className="hidden" muted />
+        <video ref={webcamVideoRef} className="hidden" muted />
       </div>
     </div>
   );
