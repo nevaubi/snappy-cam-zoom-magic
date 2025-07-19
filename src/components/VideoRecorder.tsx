@@ -88,16 +88,47 @@ const VideoRecorder = () => {
 
   // Initialize video elements for streams
   const initializeVideoElements = useCallback(async () => {
-    if (config.screenEnabled && screenStreamRef.current && screenVideoRef.current) {
-      screenVideoRef.current.srcObject = screenStreamRef.current;
-      screenVideoRef.current.muted = true;
-      await screenVideoRef.current.play();
-    }
-    
-    if (config.webcamEnabled && webcamStreamRef.current && webcamVideoRef.current) {
-      webcamVideoRef.current.srcObject = webcamStreamRef.current;
-      webcamVideoRef.current.muted = true;
-      await webcamVideoRef.current.play();
+    try {
+      // Create video elements if they don't exist
+      if (!screenVideoRef.current) {
+        screenVideoRef.current = document.createElement('video');
+        screenVideoRef.current.muted = true;
+        screenVideoRef.current.autoplay = true;
+        screenVideoRef.current.playsInline = true;
+      }
+      
+      if (!webcamVideoRef.current) {
+        webcamVideoRef.current = document.createElement('video');
+        webcamVideoRef.current.muted = true;
+        webcamVideoRef.current.autoplay = true;
+        webcamVideoRef.current.playsInline = true;
+      }
+
+      const promises = [];
+
+      if (config.screenEnabled && screenStreamRef.current && screenVideoRef.current) {
+        screenVideoRef.current.srcObject = screenStreamRef.current;
+        promises.push(new Promise((resolve) => {
+          screenVideoRef.current!.addEventListener('canplay', resolve, { once: true });
+          screenVideoRef.current!.play();
+        }));
+      }
+      
+      if (config.webcamEnabled && webcamStreamRef.current && webcamVideoRef.current) {
+        webcamVideoRef.current.srcObject = webcamStreamRef.current;
+        promises.push(new Promise((resolve) => {
+          webcamVideoRef.current!.addEventListener('canplay', resolve, { once: true });
+          webcamVideoRef.current!.play();
+        }));
+      }
+
+      await Promise.all(promises);
+    } catch (error) {
+      console.error('Error initializing video elements:', error);
+      toast({
+        title: "Video Initialization Error",
+        description: "Failed to setup video streams"
+      });
     }
   }, [config.screenEnabled, config.webcamEnabled]);
 
@@ -113,25 +144,27 @@ const VideoRecorder = () => {
     canvas.height = 1080;
 
     const compositeStreams = () => {
-      if (!isRecording) return;
+      try {
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw background if exists
-      if (backgroundImageRef.current) {
-        ctx.drawImage(backgroundImageRef.current, 0, 0, canvas.width, canvas.height);
-      } else {
-        // Gradient background
-        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-        gradient.addColorStop(0, 'hsl(265 89% 70%)');
-        gradient.addColorStop(1, 'hsl(280 100% 75%)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Draw background if exists
+        if (backgroundImageRef.current) {
+          ctx.drawImage(backgroundImageRef.current, 0, 0, canvas.width, canvas.height);
+        } else {
+          // Gradient background
+          const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+          gradient.addColorStop(0, 'hsl(265 89% 70%)');
+          gradient.addColorStop(1, 'hsl(280 100% 75%)');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+      } catch (error) {
+        console.error('Canvas composition error:', error);
       }
 
       // Draw screen capture
-      if (config.screenEnabled && screenVideoRef.current && screenVideoRef.current.readyState >= 2) {
+      if (config.screenEnabled && screenVideoRef.current && screenVideoRef.current.readyState >= 3) {
         ctx.save();
         const radius = config.videoRoundness;
         if (radius > 0) {
@@ -144,7 +177,7 @@ const VideoRecorder = () => {
       }
 
       // Draw webcam
-      if (config.webcamEnabled && webcamVideoRef.current && webcamVideoRef.current.readyState >= 2) {
+      if (config.webcamEnabled && webcamVideoRef.current && webcamVideoRef.current.readyState >= 3) {
         const size = (config.webcamSize / 100) * Math.min(canvas.width, canvas.height) * 0.3;
         const x = (config.webcamX / 100) * (canvas.width - size);
         const y = (config.webcamY / 100) * (canvas.height - size);
@@ -171,29 +204,59 @@ const VideoRecorder = () => {
 
   const startRecording = async () => {
     try {
+      setIsRecording(true);
+      
       // Get screen capture
       if (config.screenEnabled) {
-        screenStreamRef.current = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: 1920, height: 1080 },
-          audio: true
-        });
+        try {
+          screenStreamRef.current = await navigator.mediaDevices.getDisplayMedia({
+            video: { width: 1920, height: 1080, frameRate: 30 },
+            audio: true
+          });
+        } catch (screenError) {
+          console.error('Screen capture failed:', screenError);
+          setIsRecording(false);
+          if (screenError instanceof DOMException && screenError.name === 'NotAllowedError') {
+            toast({
+              title: "Permission Denied",
+              description: "Screen recording permission was denied. Please allow access and try again."
+            });
+          } else {
+            toast({
+              title: "Screen Capture Error",
+              description: "Failed to capture screen. Please try again."
+            });
+          }
+          return;
+        }
       }
 
       // Get webcam
       if (config.webcamEnabled) {
-        webcamStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1920, height: 1080 },
-          audio: false
-        });
+        try {
+          webcamStreamRef.current = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480, frameRate: 30 },
+            audio: false
+          });
+        } catch (webcamError) {
+          console.warn('Webcam access failed:', webcamError);
+          toast({
+            title: "Webcam Warning",
+            description: "Webcam access denied, continuing with screen only"
+          });
+        }
       }
 
       // Setup canvas recording
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) {
+        setIsRecording(false);
+        return;
+      }
 
       await setupCanvas();
       
-      const stream = canvas.captureStream(60);
+      const stream = canvas.captureStream(30);
       
       // Add audio from screen if available
       if (screenStreamRef.current) {
@@ -201,9 +264,16 @@ const VideoRecorder = () => {
         audioTracks.forEach(track => stream.addTrack(track));
       }
 
-      mediaRecorderRef.current = new MediaRecorder(stream, {
-        mimeType: 'video/webm;codecs=vp9'
-      });
+      // Try different codecs for better compatibility
+      let mimeType = 'video/webm;codecs=vp8,opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'video/mp4';
+        }
+      }
+
+      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
 
       recordedChunksRef.current = [];
 
@@ -214,19 +284,23 @@ const VideoRecorder = () => {
       };
 
       mediaRecorderRef.current.onstop = async () => {
-        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
         const url = URL.createObjectURL(blob);
         setRecordedVideoUrl(url);
         
-        // Get video duration for timeline
-        const duration = await getVideoDuration(blob);
-        setEditorState(prev => ({ ...prev, duration, trimEnd: duration }));
+        try {
+          // Get video duration for timeline
+          const duration = await getVideoDuration(blob);
+          setEditorState(prev => ({ ...prev, duration, trimEnd: duration }));
+        } catch (durationError) {
+          console.warn('Could not get video duration:', durationError);
+          setEditorState(prev => ({ ...prev, duration: 60, trimEnd: 60 }));
+        }
         
         setActiveTab('edit');
       };
 
-      mediaRecorderRef.current.start();
-      setIsRecording(true);
+      mediaRecorderRef.current.start(1000); // Record in 1-second chunks
       
       toast({
         title: "Recording Started",
@@ -235,9 +309,10 @@ const VideoRecorder = () => {
 
     } catch (error) {
       console.error('Error starting recording:', error);
+      setIsRecording(false);
       toast({
         title: "Recording Error",
-        description: "Failed to start recording. Please check permissions."
+        description: "Failed to start recording. Please check your browser compatibility."
       });
     }
   };
@@ -269,14 +344,38 @@ const VideoRecorder = () => {
   const handleBackgroundUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid File",
+          description: "Please select an image file"
+        });
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
           backgroundImageRef.current = img;
           setConfig(prev => ({ ...prev, backgroundImage: e.target?.result as string }));
+          toast({
+            title: "Background Updated",
+            description: "Background image has been set successfully!"
+          });
+        };
+        img.onerror = () => {
+          toast({
+            title: "Image Error",
+            description: "Failed to load the selected image"
+          });
         };
         img.src = e.target?.result as string;
+      };
+      reader.onerror = () => {
+        toast({
+          title: "File Error",
+          description: "Failed to read the selected file"
+        });
       };
       reader.readAsDataURL(file);
     }
