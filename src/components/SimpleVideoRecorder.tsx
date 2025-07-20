@@ -70,6 +70,7 @@ const SimpleVideoRecorder = () => {
     duration: 2000,
     animationSpeed: 300
   });
+  const [zoomCounter, setZoomCounter] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -105,42 +106,68 @@ const SimpleVideoRecorder = () => {
   }, [isRecording]);
 
   const createZoomOverlay = useCallback(() => {
-    const overlay = zoomOverlayRef.current;
-    if (!overlay) return;
-
-    // Create zoom effect at mouse position
+    console.log('🎯 Zoom triggered at:', mousePositionRef.current);
+    
+    // Create overlay directly on body for better positioning
     const zoomElement = document.createElement('div');
+    const size = 120;
+    
     zoomElement.style.cssText = `
       position: fixed;
-      top: ${mousePositionRef.current.y - 50}px;
-      left: ${mousePositionRef.current.x - 50}px;
-      width: 100px;
-      height: 100px;
-      border: 3px solid #3b82f6;
+      top: ${mousePositionRef.current.y - size/2}px;
+      left: ${mousePositionRef.current.x - size/2}px;
+      width: ${size}px;
+      height: ${size}px;
+      border: 4px solid hsl(var(--primary));
       border-radius: 50%;
-      background: rgba(59, 130, 246, 0.1);
+      background: hsl(var(--primary) / 0.15);
       pointer-events: none;
-      z-index: 9999;
+      z-index: 99999;
       transform: scale(0);
-      animation: zoomPulse ${zoomConfig.duration}ms ease-in-out;
+      animation: zoomPulse ${zoomConfig.animationSpeed}ms ease-out;
+      box-shadow: 0 0 20px hsl(var(--primary) / 0.5), inset 0 0 20px hsl(var(--primary) / 0.2);
     `;
 
-    overlay.appendChild(zoomElement);
+    // Add multiple zoom rings for better effect
+    const outerRing = document.createElement('div');
+    outerRing.style.cssText = `
+      position: absolute;
+      top: -10px;
+      left: -10px;
+      right: -10px;
+      bottom: -10px;
+      border: 2px solid hsl(var(--primary) / 0.6);
+      border-radius: 50%;
+      animation: zoomPulse ${zoomConfig.animationSpeed + 200}ms ease-out;
+    `;
+
+    zoomElement.appendChild(outerRing);
+    document.body.appendChild(zoomElement);
+    
+    setZoomCounter(prev => prev + 1);
 
     // Remove after animation
     setTimeout(() => {
-      if (overlay.contains(zoomElement)) {
-        overlay.removeChild(zoomElement);
+      if (document.body.contains(zoomElement)) {
+        document.body.removeChild(zoomElement);
       }
-    }, zoomConfig.duration);
-  }, [zoomConfig.duration]);
+    }, zoomConfig.animationSpeed + 500);
+  }, [zoomConfig.animationSpeed]);
 
   const handleKeyPress = useCallback((event: KeyboardEvent) => {
     if (!isRecording) return;
     
-    // Trigger zoom on spacebar or 'z' key
-    if (event.code === 'Space' || event.key.toLowerCase() === 'z') {
+    console.log('🔑 Key pressed:', event.key, event.code);
+    
+    // Use keys that don't have default browser behaviors
+    const triggerKeys = ['x', 'z', 'q'];
+    const key = event.key.toLowerCase();
+    
+    if (triggerKeys.includes(key)) {
       event.preventDefault();
+      event.stopPropagation();
+      
+      console.log('✅ Zoom key detected:', key);
       
       zoomEventsRef.current.push({
         x: mousePositionRef.current.x,
@@ -154,12 +181,21 @@ const SimpleVideoRecorder = () => {
 
   useEffect(() => {
     if (isRecording) {
-      document.addEventListener('mousemove', trackMousePosition);
-      document.addEventListener('keydown', handleKeyPress);
+      // Use capture phase to intercept events before default behaviors
+      document.addEventListener('mousemove', trackMousePosition, { capture: true });
+      document.addEventListener('keydown', handleKeyPress, { capture: true });
+      document.addEventListener('keyup', handleKeyPress, { capture: true });
+      
+      console.log('🎬 Recording started - event listeners attached');
+      
       return () => {
-        document.removeEventListener('mousemove', trackMousePosition);
-        document.removeEventListener('keydown', handleKeyPress);
+        document.removeEventListener('mousemove', trackMousePosition, { capture: true });
+        document.removeEventListener('keydown', handleKeyPress, { capture: true });
+        document.removeEventListener('keyup', handleKeyPress, { capture: true });
+        console.log('🛑 Recording stopped - event listeners removed');
       };
+    } else {
+      setZoomCounter(0);
     }
   }, [isRecording, trackMousePosition, handleKeyPress]);
 
@@ -342,7 +378,7 @@ const SimpleVideoRecorder = () => {
             </div>
             
             <div className="text-xs text-muted-foreground mt-3">
-              💡 Press <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Space</kbd> or <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Z</kbd> while recording to zoom at mouse location
+              💡 Press <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">X</kbd>, <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Z</kbd>, or <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Q</kbd> while recording to zoom at mouse location
             </div>
           </div>
 
@@ -386,8 +422,6 @@ const SimpleVideoRecorder = () => {
             </div>
           )}
 
-          {/* Zoom overlay container */}
-          <div ref={zoomOverlayRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 9999 }} />
 
           {/* Recording Status */}
           {isRecording && (
@@ -398,8 +432,13 @@ const SimpleVideoRecorder = () => {
               </div>
               <div className="text-xs text-muted-foreground flex items-center gap-2">
                 <ZoomIn className="w-3 h-3" />
-                Press <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Space</kbd> or <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Z</kbd> to zoom ({zoomConfig.intensity}x for {zoomConfig.duration / 1000}s)
+                Press <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">X</kbd>, <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Z</kbd>, or <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Q</kbd> to zoom ({zoomConfig.intensity}x for {zoomConfig.duration / 1000}s)
               </div>
+              {zoomCounter > 0 && (
+                <div className="text-xs text-green-600 flex items-center gap-2">
+                  🎯 Zooms triggered: {zoomCounter} | Mouse: ({mousePositionRef.current.x}, {mousePositionRef.current.y})
+                </div>
+              )}
             </div>
           )}
         </Card>
