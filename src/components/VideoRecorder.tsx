@@ -237,15 +237,31 @@ const VideoRecorder = () => {
 
       mediaRecorderRef.current.onstop = async () => {
         const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+        console.log('🎬 Recording stopped - Blob size:', blob.size, 'bytes, Type:', blob.type);
+        
+        if (blob.size === 0) {
+          console.error('❌ Recording failed - Empty blob');
+          toast({
+            title: "Recording Error",
+            description: "Recording failed - no data captured"
+          });
+          return;
+        }
+        
         const url = URL.createObjectURL(blob);
+        console.log('📺 Video URL created:', url);
         setRecordedVideoUrl(url);
         
+        // Try to get duration with fallback
         try {
           const duration = await getVideoDuration(blob);
+          console.log('⏱️ Video duration detected:', duration, 'seconds');
           setEditorState(prev => ({ ...prev, duration, trimEnd: duration }));
         } catch (durationError) {
-          console.warn('Could not get video duration:', durationError);
-          setEditorState(prev => ({ ...prev, duration: 60, trimEnd: 60 }));
+          console.warn('⚠️ Could not get video duration:', durationError);
+          console.log('🔄 Using fallback duration detection...');
+          // Set a default duration, will be updated when video loads
+          setEditorState(prev => ({ ...prev, duration: 10, trimEnd: 10 }));
         }
         
         setActiveTab('edit');
@@ -461,12 +477,57 @@ const VideoRecorder = () => {
     }));
   };
 
-  // Set up video event listeners
+  // Set up video event listeners with fallback duration detection
   useEffect(() => {
     const video = previewVideoRef.current;
-    if (video) {
+    if (video && (processedVideoUrl || recordedVideoUrl)) {
+      console.log('🎥 Setting up video event listeners for:', processedVideoUrl || recordedVideoUrl);
+      
+      const handleLoadedMetadata = () => {
+        console.log('📊 Video metadata loaded - Duration:', video.duration, 'Ready state:', video.readyState);
+        if (video.duration && video.duration !== Infinity && !isNaN(video.duration)) {
+          setEditorState(prev => ({ 
+            ...prev, 
+            duration: video.duration, 
+            trimEnd: video.duration 
+          }));
+          console.log('✅ Duration updated from video metadata:', video.duration);
+        }
+      };
+      
+      const handleLoadedData = () => {
+        console.log('📄 Video data loaded - Can play:', video.readyState >= 3);
+      };
+      
+      const handleError = (e: Event) => {
+        console.error('❌ Video loading error:', e);
+        const errorTarget = e.target as HTMLVideoElement;
+        if (errorTarget.error) {
+          console.error('Video error details:', errorTarget.error.message, 'Code:', errorTarget.error.code);
+          toast({
+            title: "Video Error",
+            description: `Failed to load video: ${errorTarget.error.message}`
+          });
+        }
+      };
+      
+      const handleCanPlay = () => {
+        console.log('▶️ Video can play - Duration:', video.duration);
+      };
+      
       video.addEventListener('timeupdate', handleTimeUpdate);
-      return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
+      video.addEventListener('loadeddata', handleLoadedData);
+      video.addEventListener('error', handleError);
+      video.addEventListener('canplay', handleCanPlay);
+      
+      return () => {
+        video.removeEventListener('timeupdate', handleTimeUpdate);
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        video.removeEventListener('loadeddata', handleLoadedData);
+        video.removeEventListener('error', handleError);
+        video.removeEventListener('canplay', handleCanPlay);
+      };
     }
   }, [processedVideoUrl || recordedVideoUrl]);
 
@@ -751,23 +812,49 @@ const VideoRecorder = () => {
             </Card>
 
             {/* Professional Timeline */}
-            {editorState.duration > 0 && (
-              <ProfessionalTimeline
-                videoUrl={processedVideoUrl || recordedVideoUrl}
-                duration={editorState.duration}
-                currentTime={editorState.currentTime}
-                trimStart={editorState.trimStart}
-                trimEnd={editorState.trimEnd}
-                zoomEffects={editorState.zoomEffects}
-                selectedZoomEffect={editorState.selectedZoomEffect}
-                onCurrentTimeChange={handleCurrentTimeChange}
-                onTrimChange={handleTrimChange}
-                onPlayPause={handlePlayPause}
-                onZoomEffectsChange={handleZoomEffectsChange}
-                onZoomEffectSelect={handleZoomEffectSelect}
-                isPlaying={editorState.isPlaying}
-              />
-            )}
+            <div className="space-y-4">
+              {editorState.duration > 0 ? (
+                <ProfessionalTimeline
+                  videoUrl={processedVideoUrl || recordedVideoUrl}
+                  duration={editorState.duration}
+                  currentTime={editorState.currentTime}
+                  trimStart={editorState.trimStart}
+                  trimEnd={editorState.trimEnd}
+                  zoomEffects={editorState.zoomEffects}
+                  selectedZoomEffect={editorState.selectedZoomEffect}
+                  onCurrentTimeChange={handleCurrentTimeChange}
+                  onTrimChange={handleTrimChange}
+                  onPlayPause={handlePlayPause}
+                  onZoomEffectsChange={handleZoomEffectsChange}
+                  onZoomEffectSelect={handleZoomEffectSelect}
+                  isPlaying={editorState.isPlaying}
+                />
+              ) : (
+                <Card className="bg-controls border-0 p-6">
+                  <div className="text-center text-controls-foreground/70">
+                    <div className="mb-2">⏳ Loading video timeline...</div>
+                    <div className="text-sm">If this persists, the video may have failed to load properly.</div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={() => {
+                        // Force duration detection
+                        if (previewVideoRef.current && previewVideoRef.current.duration) {
+                          setEditorState(prev => ({ 
+                            ...prev, 
+                            duration: previewVideoRef.current!.duration,
+                            trimEnd: previewVideoRef.current!.duration
+                          }));
+                        }
+                      }}
+                    >
+                      Force Timeline Load
+                    </Button>
+                  </div>
+                </Card>
+              )}
+            </div>
 
             {/* Zoom Controls Panel */}
             <ZoomControls
