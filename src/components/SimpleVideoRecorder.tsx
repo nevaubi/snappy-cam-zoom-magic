@@ -22,6 +22,11 @@ interface ZoomConfig {
   animationSpeed: number; // animation duration in ms
 }
 
+interface MousePosition {
+  x: number;
+  y: number;
+}
+
 interface ZoomEvent {
   x: number;
   y: number;
@@ -69,12 +74,9 @@ const SimpleVideoRecorder = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const compositeStreamRef = useRef<MediaStream | null>(null);
-  const animationFrameRef = useRef<number>(null);
   const zoomEventsRef = useRef<ZoomEvent[]>([]);
-  const isZoomingRef = useRef(false);
+  const mousePositionRef = useRef<MousePosition>({ x: 0, y: 0 });
+  const zoomOverlayRef = useRef<HTMLDivElement>(null);
 
   const getSupportedMimeType = (preferredType: string): string => {
     const fallbacks = [
@@ -94,195 +96,118 @@ const SimpleVideoRecorder = () => {
     return 'video/webm';
   };
 
-  const setupCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const config = QUALITY_PRESETS[quality];
-    canvas.width = config.resolution.width;
-    canvas.height = config.resolution.height;
-
-    const drawFrame = () => {
-      if (!isRecording) return;
-
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Draw the video frame
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Check for active zoom
-      const now = performance.now();
-      const activeZoom = zoomEventsRef.current.find(zoom => 
-        now >= zoom.timestamp && now <= zoom.timestamp + zoomConfig.duration
-      );
-
-      if (activeZoom && !isZoomingRef.current) {
-        performZoom(ctx, activeZoom, now);
-      }
-
-      animationFrameRef.current = requestAnimationFrame(drawFrame);
-    };
-
-    drawFrame();
-  }, [isRecording, quality, zoomConfig]);
-
-  const performZoom = (ctx: CanvasRenderingContext2D, zoomEvent: ZoomEvent, currentTime: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const elapsed = currentTime - zoomEvent.timestamp;
-    const progress = Math.min(elapsed / zoomConfig.animationSpeed, 1);
-    
-    // Zoom in animation
-    if (elapsed < zoomConfig.animationSpeed) {
-      const scale = 1 + (zoomConfig.intensity - 1) * progress;
-      const zoomX = zoomEvent.x;
-      const zoomY = zoomEvent.y;
-      
-      ctx.save();
-      ctx.translate(zoomX, zoomY);
-      ctx.scale(scale, scale);
-      ctx.translate(-zoomX, -zoomY);
-      ctx.restore();
-    }
-    // Hold zoom
-    else if (elapsed < zoomConfig.duration - zoomConfig.animationSpeed) {
-      const zoomX = zoomEvent.x;
-      const zoomY = zoomEvent.y;
-      
-      ctx.save();
-      ctx.translate(zoomX, zoomY);
-      ctx.scale(zoomConfig.intensity, zoomConfig.intensity);
-      ctx.translate(-zoomX, -zoomY);
-      ctx.restore();
-    }
-    // Zoom out animation
-    else {
-      const outProgress = (elapsed - (zoomConfig.duration - zoomConfig.animationSpeed)) / zoomConfig.animationSpeed;
-      const scale = zoomConfig.intensity - (zoomConfig.intensity - 1) * outProgress;
-      const zoomX = zoomEvent.x;
-      const zoomY = zoomEvent.y;
-      
-      ctx.save();
-      ctx.translate(zoomX, zoomY);
-      ctx.scale(scale, scale);
-      ctx.translate(-zoomX, -zoomY);
-      ctx.restore();
-    }
-
-    // Remove completed zoom events
-    if (elapsed >= zoomConfig.duration) {
-      zoomEventsRef.current = zoomEventsRef.current.filter(z => z !== zoomEvent);
-    }
-  };
-
-  const handleDoubleClick = useCallback((event: MouseEvent) => {
+  const trackMousePosition = useCallback((event: MouseEvent) => {
     if (!isRecording) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    const x = (event.clientX - rect.left) * scaleX;
-    const y = (event.clientY - rect.top) * scaleY;
-
-    zoomEventsRef.current.push({
-      x,
-      y,
-      timestamp: performance.now()
-    });
+    mousePositionRef.current = {
+      x: event.clientX,
+      y: event.clientY
+    };
   }, [isRecording]);
+
+  const createZoomOverlay = useCallback(() => {
+    const overlay = zoomOverlayRef.current;
+    if (!overlay) return;
+
+    // Create zoom effect at mouse position
+    const zoomElement = document.createElement('div');
+    zoomElement.style.cssText = `
+      position: fixed;
+      top: ${mousePositionRef.current.y - 50}px;
+      left: ${mousePositionRef.current.x - 50}px;
+      width: 100px;
+      height: 100px;
+      border: 3px solid #3b82f6;
+      border-radius: 50%;
+      background: rgba(59, 130, 246, 0.1);
+      pointer-events: none;
+      z-index: 9999;
+      transform: scale(0);
+      animation: zoomPulse ${zoomConfig.duration}ms ease-in-out;
+    `;
+
+    overlay.appendChild(zoomElement);
+
+    // Remove after animation
+    setTimeout(() => {
+      if (overlay.contains(zoomElement)) {
+        overlay.removeChild(zoomElement);
+      }
+    }, zoomConfig.duration);
+  }, [zoomConfig.duration]);
+
+  const handleKeyPress = useCallback((event: KeyboardEvent) => {
+    if (!isRecording) return;
+    
+    // Trigger zoom on spacebar or 'z' key
+    if (event.code === 'Space' || event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      
+      zoomEventsRef.current.push({
+        x: mousePositionRef.current.x,
+        y: mousePositionRef.current.y,
+        timestamp: performance.now()
+      });
+
+      createZoomOverlay();
+    }
+  }, [isRecording, createZoomOverlay]);
 
   useEffect(() => {
     if (isRecording) {
-      document.addEventListener('dblclick', handleDoubleClick);
-      return () => document.removeEventListener('dblclick', handleDoubleClick);
+      document.addEventListener('mousemove', trackMousePosition);
+      document.addEventListener('keydown', handleKeyPress);
+      return () => {
+        document.removeEventListener('mousemove', trackMousePosition);
+        document.removeEventListener('keydown', handleKeyPress);
+      };
     }
-  }, [isRecording, handleDoubleClick]);
+  }, [isRecording, trackMousePosition, handleKeyPress]);
 
   const startRecording = async () => {
     try {
       setError('');
       const config = QUALITY_PRESETS[quality];
       
-      // Enhanced screen capture with quality constraints
+      // Simple screen capture
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: { ideal: config.resolution.width },
           height: { ideal: config.resolution.height },
-          frameRate: { ideal: config.frameRate },
-          displaySurface: 'monitor'
+          frameRate: { ideal: config.frameRate }
         },
-        audio: {
-          sampleRate: 48000,
-          channelCount: 2,
-          echoCancellation: false,
-          noiseSuppression: false
-        }
+        audio: true
       });
 
       streamRef.current = screenStream;
       
-      // Setup video element to receive the screen stream
-      const video = videoRef.current;
-      if (video) {
-        video.srcObject = screenStream;
-        video.play();
-        
-        video.onloadedmetadata = () => {
-          setupCanvas();
-          
-          // Get canvas stream for recording
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const canvasStream = canvas.captureStream(config.frameRate);
-            
-            // Add audio tracks from screen stream
-            const audioTracks = screenStream.getAudioTracks();
-            audioTracks.forEach(track => canvasStream.addTrack(track));
-            
-            compositeStreamRef.current = canvasStream;
-            
-            // Start MediaRecorder with the composite stream
-            chunksRef.current = [];
-            const mimeType = getSupportedMimeType(config.mimeType);
-            
-            const options: MediaRecorderOptions = {
-              mimeType,
-              videoBitsPerSecond: config.videoBitsPerSecond,
-              audioBitsPerSecond: config.audioBitsPerSecond
-            };
+      // Start MediaRecorder directly with screen stream
+      chunksRef.current = [];
+      const mimeType = getSupportedMimeType(config.mimeType);
+      
+      const options: MediaRecorderOptions = {
+        mimeType,
+        videoBitsPerSecond: config.videoBitsPerSecond,
+        audioBitsPerSecond: config.audioBitsPerSecond
+      };
 
-            const mediaRecorder = new MediaRecorder(canvasStream, options);
-            mediaRecorderRef.current = mediaRecorder;
+      const mediaRecorder = new MediaRecorder(screenStream, options);
+      mediaRecorderRef.current = mediaRecorder;
 
-            mediaRecorder.ondataavailable = (event) => {
-              if (event.data.size > 0) {
-                chunksRef.current.push(event.data);
-              }
-            };
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
 
-            mediaRecorder.onstop = () => {
-              const blob = new Blob(chunksRef.current, { type: mimeType });
-              const url = URL.createObjectURL(blob);
-              setRecordedVideoUrl(url);
-              setIsRecording(false);
-            };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        setRecordedVideoUrl(url);
+        setIsRecording(false);
+      };
 
-            // Start recording with 1-second intervals for smoother data handling
-            mediaRecorder.start(1000);
-            setIsRecording(true);
-          };
-        };
-      }
+      mediaRecorder.start(1000);
+      setIsRecording(true);
 
     } catch (err) {
       setError('Failed to start recording. Please allow screen capture and try again.');
@@ -294,18 +219,9 @@ const SimpleVideoRecorder = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       
-      // Stop animation frame
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      
       // Stop all stream tracks
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      
-      if (compositeStreamRef.current) {
-        compositeStreamRef.current.getTracks().forEach(track => track.stop());
       }
       
       // Clear zoom events
@@ -426,7 +342,7 @@ const SimpleVideoRecorder = () => {
             </div>
             
             <div className="text-xs text-muted-foreground mt-3">
-              💡 Double-click anywhere on your screen while recording to trigger zoom at that location
+              💡 Press <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Space</kbd> or <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Z</kbd> while recording to zoom at mouse location
             </div>
           </div>
 
@@ -470,9 +386,8 @@ const SimpleVideoRecorder = () => {
             </div>
           )}
 
-          {/* Hidden canvas and video for zoom processing */}
-          <canvas ref={canvasRef} className="hidden" />
-          <video ref={videoRef} className="hidden" muted />
+          {/* Zoom overlay container */}
+          <div ref={zoomOverlayRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 9999 }} />
 
           {/* Recording Status */}
           {isRecording && (
@@ -483,7 +398,7 @@ const SimpleVideoRecorder = () => {
               </div>
               <div className="text-xs text-muted-foreground flex items-center gap-2">
                 <ZoomIn className="w-3 h-3" />
-                Double-click anywhere to zoom ({zoomConfig.intensity}x for {zoomConfig.duration / 1000}s)
+                Press <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Space</kbd> or <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Z</kbd> to zoom ({zoomConfig.intensity}x for {zoomConfig.duration / 1000}s)
               </div>
             </div>
           )}
