@@ -1,7 +1,7 @@
-import VideoRecorder from '@/components/VideoRecorder';
+import SimpleVideoRecorder from '@/components/SimpleVideoRecorder';
 
 const Index = () => {
-  return <VideoRecorder />;
+  return <SimpleVideoRecorder />;
 };
 
 export default Index;
