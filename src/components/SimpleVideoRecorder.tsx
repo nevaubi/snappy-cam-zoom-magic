@@ -71,6 +71,8 @@ const SimpleVideoRecorder = () => {
     animationSpeed: 300
   });
   const [zoomCounter, setZoomCounter] = useState(0);
+  const [isTabFocused, setIsTabFocused] = useState(true);
+  const [showZoomIndicator, setShowZoomIndicator] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -108,9 +110,9 @@ const SimpleVideoRecorder = () => {
   const createZoomOverlay = useCallback(() => {
     console.log('🎯 Zoom triggered at:', mousePositionRef.current);
     
-    // Create overlay directly on body for better positioning
+    // Create a more prominent zoom indicator that will be visible in screen recordings
     const zoomElement = document.createElement('div');
-    const size = 120;
+    const size = 200; // Larger size for better visibility
     
     zoomElement.style.cssText = `
       position: fixed;
@@ -118,41 +120,80 @@ const SimpleVideoRecorder = () => {
       left: ${mousePositionRef.current.x - size/2}px;
       width: ${size}px;
       height: ${size}px;
-      border: 4px solid hsl(var(--primary));
+      border: 6px solid #ff4444;
       border-radius: 50%;
-      background: hsl(var(--primary) / 0.15);
+      background: rgba(255, 68, 68, 0.1);
       pointer-events: none;
-      z-index: 99999;
+      z-index: 999999;
       transform: scale(0);
       animation: zoomPulse ${zoomConfig.animationSpeed}ms ease-out;
-      box-shadow: 0 0 20px hsl(var(--primary) / 0.5), inset 0 0 20px hsl(var(--primary) / 0.2);
+      box-shadow: 
+        0 0 30px rgba(255, 68, 68, 0.6), 
+        inset 0 0 30px rgba(255, 68, 68, 0.2),
+        0 0 0 20px rgba(255, 68, 68, 0.1);
     `;
 
-    // Add multiple zoom rings for better effect
+    // Add center dot
+    const centerDot = document.createElement('div');
+    centerDot.style.cssText = `
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 12px;
+      height: 12px;
+      background: #ff4444;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 10px rgba(255, 68, 68, 0.8);
+    `;
+
+    // Add outer ripple ring
     const outerRing = document.createElement('div');
     outerRing.style.cssText = `
       position: absolute;
-      top: -10px;
-      left: -10px;
-      right: -10px;
-      bottom: -10px;
-      border: 2px solid hsl(var(--primary) / 0.6);
+      top: -15px;
+      left: -15px;
+      right: -15px;
+      bottom: -15px;
+      border: 3px solid rgba(255, 68, 68, 0.7);
       border-radius: 50%;
       animation: zoomPulse ${zoomConfig.animationSpeed + 200}ms ease-out;
     `;
 
+    // Add zoom text indicator
+    const zoomText = document.createElement('div');
+    zoomText.style.cssText = `
+      position: absolute;
+      top: ${size + 20}px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 68, 68, 0.9);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: bold;
+      white-space: nowrap;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    `;
+    zoomText.textContent = `${zoomConfig.intensity}x ZOOM`;
+
+    zoomElement.appendChild(centerDot);
     zoomElement.appendChild(outerRing);
+    zoomElement.appendChild(zoomText);
     document.body.appendChild(zoomElement);
     
     setZoomCounter(prev => prev + 1);
+    setShowZoomIndicator(true);
 
     // Remove after animation
     setTimeout(() => {
       if (document.body.contains(zoomElement)) {
         document.body.removeChild(zoomElement);
       }
-    }, zoomConfig.animationSpeed + 500);
-  }, [zoomConfig.animationSpeed]);
+      setShowZoomIndicator(false);
+    }, zoomConfig.duration);
+  }, [zoomConfig.animationSpeed, zoomConfig.intensity, zoomConfig.duration]);
 
   const handleKeyPress = useCallback((event: KeyboardEvent) => {
     if (!isRecording) return;
@@ -179,19 +220,37 @@ const SimpleVideoRecorder = () => {
     }
   }, [isRecording, createZoomOverlay]);
 
+  // Tab focus detection
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabFocused(!document.hidden);
+    };
+
+    const handleWindowFocus = () => setIsTabFocused(true);
+    const handleWindowBlur = () => setIsTabFocused(false);
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, []);
+
   useEffect(() => {
     if (isRecording) {
       // Use capture phase to intercept events before default behaviors
       document.addEventListener('mousemove', trackMousePosition, { capture: true });
       document.addEventListener('keydown', handleKeyPress, { capture: true });
-      document.addEventListener('keyup', handleKeyPress, { capture: true });
       
       console.log('🎬 Recording started - event listeners attached');
       
       return () => {
         document.removeEventListener('mousemove', trackMousePosition, { capture: true });
         document.removeEventListener('keydown', handleKeyPress, { capture: true });
-        document.removeEventListener('keyup', handleKeyPress, { capture: true });
         console.log('🛑 Recording stopped - event listeners removed');
       };
     } else {
@@ -425,20 +484,53 @@ const SimpleVideoRecorder = () => {
 
           {/* Recording Status */}
           {isRecording && (
-            <div className="mt-6 space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                Recording in progress at {currentConfig.name}...
-              </div>
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
-                <ZoomIn className="w-3 h-3" />
-                Press <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">X</kbd>, <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Z</kbd>, or <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Q</kbd> to zoom ({zoomConfig.intensity}x for {zoomConfig.duration / 1000}s)
-              </div>
-              {zoomCounter > 0 && (
-                <div className="text-xs text-green-600 flex items-center gap-2">
-                  🎯 Zooms triggered: {zoomCounter} | Mouse: ({mousePositionRef.current.x}, {mousePositionRef.current.y})
+            <div className="mt-6 space-y-3">
+              {/* Prominent Recording Indicator */}
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-red-700 dark:text-red-300">
+                    🔴 Recording {currentConfig.name}
+                  </span>
                 </div>
-              )}
+                
+                {/* Tab Focus Warning */}
+                <div className={`text-xs p-2 rounded ${
+                  !isTabFocused 
+                    ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30' 
+                    : 'bg-green-500/20 text-green-700 dark:text-green-300 border border-green-500/30'
+                }`}>
+                  {!isTabFocused ? (
+                    <span>⚠️ <strong>Tab not focused!</strong> Zoom shortcuts only work when this tab is active. Return to this tab for zoom controls.</span>
+                  ) : (
+                    <span>✅ <strong>Tab focused.</strong> Zoom shortcuts are active on this tab only.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Zoom Instructions */}
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <div className="text-xs text-muted-foreground flex items-center gap-2 mb-2">
+                  <ZoomIn className="w-3 h-3" />
+                  <span className="font-medium">Zoom Controls (This Tab Only):</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Press <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">X</kbd>, <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Z</kbd>, or <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">Q</kbd> to create zoom markers ({zoomConfig.intensity}x for {zoomConfig.duration / 1000}s)
+                </div>
+                {zoomCounter > 0 && (
+                  <div className="text-xs text-primary mt-2 flex items-center gap-2">
+                    🎯 Zoom markers created: {zoomCounter} | Last position: ({mousePositionRef.current.x}, {mousePositionRef.current.y})
+                  </div>
+                )}
+              </div>
+
+              {/* Important Limitation Notice */}
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                <div className="text-xs text-blue-700 dark:text-blue-300">
+                  <strong>📝 Current Limitation:</strong> Zoom shortcuts only work when this browser tab is focused. 
+                  For cross-tab functionality, we'd need a Chrome extension (coming in future updates).
+                </div>
+              </div>
             </div>
           )}
         </Card>
