@@ -6,7 +6,9 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
 import { useVideoProcessor } from '@/hooks/useVideoProcessor';
-import { VideoTimeline } from './VideoTimeline';
+import { ProfessionalTimeline } from './ProfessionalTimeline';
+import { ZoomControls } from './ZoomControls';
+import { ZoomEffect } from './ZoomEffect';
 import { StreamManager, drawRoundedRect } from '@/utils/StreamManager';
 
 interface RecordingConfig {
@@ -32,6 +34,8 @@ interface VideoEditorState {
   currentTime: number;
   duration: number;
   isPlaying: boolean;
+  zoomEffects: ZoomEffect[];
+  selectedZoomEffect: ZoomEffect | null;
 }
 
 const VideoRecorder = () => {
@@ -77,7 +81,9 @@ const VideoRecorder = () => {
     trimEnd: 100,
     currentTime: 0,
     duration: 0,
-    isPlaying: false
+    isPlaying: false,
+    zoomEffects: [],
+    selectedZoomEffect: null
   });
 
   // Initialize FFmpeg when component mounts
@@ -436,6 +442,25 @@ const VideoRecorder = () => {
     setEditorState(prev => ({ ...prev, trimStart: start, trimEnd: end }));
   };
 
+  const handleZoomEffectsChange = (effects: ZoomEffect[]) => {
+    setEditorState(prev => ({ ...prev, zoomEffects: effects }));
+  };
+
+  const handleZoomEffectSelect = (effect: ZoomEffect | null) => {
+    setEditorState(prev => ({ ...prev, selectedZoomEffect: effect }));
+  };
+
+  const handleZoomEffectUpdate = (effect: ZoomEffect) => {
+    const updatedEffects = editorState.zoomEffects.map(e =>
+      e.id === effect.id ? effect : e
+    );
+    setEditorState(prev => ({ 
+      ...prev, 
+      zoomEffects: updatedEffects,
+      selectedZoomEffect: effect
+    }));
+  };
+
   // Set up video event listeners
   useEffect(() => {
     const video = previewVideoRef.current;
@@ -725,20 +750,30 @@ const VideoRecorder = () => {
               </div>
             </Card>
 
-            {/* Timeline */}
+            {/* Professional Timeline */}
             {editorState.duration > 0 && (
-              <VideoTimeline
+              <ProfessionalTimeline
                 videoUrl={processedVideoUrl || recordedVideoUrl}
                 duration={editorState.duration}
                 currentTime={editorState.currentTime}
                 trimStart={editorState.trimStart}
                 trimEnd={editorState.trimEnd}
+                zoomEffects={editorState.zoomEffects}
+                selectedZoomEffect={editorState.selectedZoomEffect}
                 onCurrentTimeChange={handleCurrentTimeChange}
                 onTrimChange={handleTrimChange}
                 onPlayPause={handlePlayPause}
+                onZoomEffectsChange={handleZoomEffectsChange}
+                onZoomEffectSelect={handleZoomEffectSelect}
                 isPlaying={editorState.isPlaying}
               />
             )}
+
+            {/* Zoom Controls Panel */}
+            <ZoomControls
+              selectedZoomEffect={editorState.selectedZoomEffect}
+              onZoomEffectUpdate={handleZoomEffectUpdate}
+            />
 
             {/* Editing Controls */}
             <div className="grid lg:grid-cols-4 gap-6">
