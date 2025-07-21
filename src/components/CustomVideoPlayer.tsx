@@ -23,6 +23,25 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [isDragging, setIsDragging] = useState<'start' | 'end' | 'scrub' | null>(null);
+  
+  // Use refs to store current values for stable callbacks
+  const trimStartRef = useRef(0);
+  const trimEndRef = useRef(0);
+  const durationRef = useRef(0);
+  const hasInitializedTrim = useRef(false);
+  
+  // Update refs when state changes
+  useEffect(() => {
+    trimStartRef.current = trimStart;
+    trimEndRef.current = trimEnd;
+    durationRef.current = duration;
+  }, [trimStart, trimEnd, duration]);
+
+  // Reset trim initialization when src changes
+  useEffect(() => {
+    hasInitializedTrim.current = false;
+    console.log('Src changed, reset trim initialization');
+  }, [src]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -37,10 +56,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         return;
       }
       
-      console.log('Valid duration detected:', videoDuration);
+      console.log('Valid duration detected:', videoDuration, 'Has initialized trim:', hasInitializedTrim.current);
       setDuration(videoDuration);
-      setTrimStart(0);
-      setTrimEnd(videoDuration);
+      
+      // Only set initial trim values if not already initialized
+      if (!hasInitializedTrim.current) {
+        console.log('Setting initial trim values:', 0, 'to', videoDuration);
+        setTrimStart(0);
+        setTrimEnd(videoDuration);
+        hasInitializedTrim.current = true;
+      }
+      
       if (onDurationLoad) {
         onDurationLoad(videoDuration);
       }
@@ -51,12 +77,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       const currentTime = video.currentTime;
       setCurrentTime(currentTime);
       
-      // If video reaches trim end, pause or loop back
-      if (trimEnd > 0 && currentTime >= trimEnd) {
+      // If video reaches trim end, pause or loop back (using refs for stable values)
+      if (trimEndRef.current > 0 && currentTime >= trimEndRef.current) {
         video.pause();
         setIsPlaying(false);
         // Optional: Loop back to start of trim
-        // video.currentTime = trimStart;
+        // video.currentTime = trimStartRef.current;
       }
     };
 
@@ -160,16 +186,19 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   };
 
   const handleTrimMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging || !trimmerRef.current || !duration) return;
+    if (!isDragging || !trimmerRef.current || !durationRef.current) return;
 
     const rect = trimmerRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, x / rect.width));
-    const time = percentage * duration;
+    const time = percentage * durationRef.current;
     const video = videoRef.current;
 
+    console.log('Mouse move:', isDragging, 'time:', time, 'percentage:', percentage);
+
     if (isDragging === 'start') {
-      const newTrimStart = Math.max(0, Math.min(time, trimEnd - 0.5));
+      const newTrimStart = Math.max(0, Math.min(time, trimEndRef.current - 0.5));
+      console.log('Setting trimStart to:', newTrimStart);
       setTrimStart(newTrimStart);
       // Show real-time preview while dragging
       if (video) {
@@ -177,7 +206,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         setCurrentTime(newTrimStart);
       }
     } else if (isDragging === 'end') {
-      const newTrimEnd = Math.min(duration, Math.max(time, trimStart + 0.5));
+      const newTrimEnd = Math.min(durationRef.current, Math.max(time, trimStartRef.current + 0.5));
+      console.log('Setting trimEnd to:', newTrimEnd);
       setTrimEnd(newTrimEnd);
       // Show real-time preview while dragging
       if (video) {
@@ -185,13 +215,13 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         setCurrentTime(newTrimEnd);
       }
     } else if (isDragging === 'scrub') {
-      const clampedTime = Math.max(trimStart, Math.min(trimEnd, time));
+      const clampedTime = Math.max(trimStartRef.current, Math.min(trimEndRef.current, time));
       if (video) {
         video.currentTime = clampedTime;
         setCurrentTime(clampedTime);
       }
     }
-  }, [isDragging, duration, trimStart, trimEnd]);
+  }, [isDragging]); // Only isDragging as dependency
 
   const handleTrimMouseUp = useCallback(() => {
     setIsDragging(null);
@@ -210,6 +240,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   }, [isDragging, handleTrimMouseMove, handleTrimMouseUp]);
 
   const resetTrim = () => {
+    console.log('Resetting trim to full duration:', duration);
     setTrimStart(0);
     setTrimEnd(duration);
   };
