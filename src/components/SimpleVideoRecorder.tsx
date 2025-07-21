@@ -7,6 +7,7 @@ import { Play, Square, Download, Settings, Upload, CheckCircle, AlertCircle } fr
 import { CustomVideoPlayer } from './CustomVideoPlayer';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getDurationFromBlob } from '@/utils/videoDuration';
 
 type QualityPreset = 'standard' | 'high' | 'ultra';
 
@@ -177,15 +178,15 @@ const SimpleVideoRecorder = () => {
 
       if (!urlData.publicUrl) throw new Error('Failed to get public URL');
 
-      // Create video element to get duration
-      const video = document.createElement('video');
-      video.src = URL.createObjectURL(blob);
-      
-      const duration = await new Promise<number>((resolve) => {
-        video.addEventListener('loadedmetadata', () => {
-          resolve(video.duration);
-        });
-      });
+      // Get video duration reliably
+      let duration: number | null = null;
+      try {
+        duration = await getDurationFromBlob(blob);
+        console.log('Successfully detected duration:', duration);
+      } catch (error) {
+        console.error('Failed to detect video duration:', error);
+        // Continue without duration - store as null
+      }
 
       // Save metadata to database
       const { error: dbError } = await supabase

@@ -24,6 +24,14 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
     const updateDuration = () => {
       const videoDuration = video.duration;
+      
+      // Validate duration before using it
+      if (isNaN(videoDuration) || !isFinite(videoDuration) || videoDuration <= 0) {
+        console.warn('Invalid video duration detected:', videoDuration);
+        return;
+      }
+      
+      console.log('Valid duration detected:', videoDuration);
       setDuration(videoDuration);
       if (onDurationLoad) {
         onDurationLoad(videoDuration);
@@ -32,14 +40,22 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     
     const handleEnded = () => setIsPlaying(false);
 
+    // Listen to multiple events for better duration detection
     video.addEventListener('loadedmetadata', updateDuration);
+    video.addEventListener('canplay', updateDuration);
+    video.addEventListener('durationchange', updateDuration);
     video.addEventListener('ended', handleEnded);
+
+    // Set preload to ensure metadata loads
+    video.preload = 'metadata';
 
     return () => {
       video.removeEventListener('loadedmetadata', updateDuration);
+      video.removeEventListener('canplay', updateDuration);
+      video.removeEventListener('durationchange', updateDuration);
       video.removeEventListener('ended', handleEnded);
     };
-  }, [onDurationLoad]);
+  }, [onDurationLoad, src]);
 
   const togglePlay = async () => {
     const video = videoRef.current;
@@ -122,11 +138,13 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           Pause
         </Button>
         
-        {duration > 0 && (
-          <span className="text-sm text-muted-foreground">
-            Duration: {formatTime(duration)}
-          </span>
-        )}
+        <span className="text-sm text-muted-foreground">
+          {duration > 0 ? (
+            `Duration: ${formatTime(duration)}`
+          ) : (
+            'Duration: Loading...'
+          )}
+        </span>
       </div>
     </div>
   );
