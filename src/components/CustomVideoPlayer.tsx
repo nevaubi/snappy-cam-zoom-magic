@@ -62,6 +62,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
   const [currentZoom, setCurrentZoom] = useState(1); // Current zoom level applied to video
   const [currentZoomTarget, setCurrentZoomTarget] = useState({ x: 3.5, y: 3.5 }); // Center by default
+  const [isZoomingIn, setIsZoomingIn] = useState(false);
+  const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Store last active zoom properties for smooth zoom-out
   const [lastZoomSpeed, setLastZoomSpeed] = useState(0.15);
@@ -502,6 +504,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     if (!videoRef.current || zoomEffects.length === 0) {
       setCurrentZoom(1);
       setCurrentZoomTarget({ x: 3.5, y: 3.5 });
+      setIsZoomingIn(false);
       return;
     }
 
@@ -510,6 +513,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     );
 
     if (activeZoom) {
+      // Clear any pending timeout
+      if (zoomTimeoutRef.current) {
+        clearTimeout(zoomTimeoutRef.current);
+        zoomTimeoutRef.current = null;
+      }
+
       // Store zoom properties for consistent zoom-out
       setLastZoomSpeed(activeZoom.zoomSpeed || 0.15);
       setLastZoomTarget({ 
@@ -517,14 +526,27 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         y: activeZoom.targetY + 0.5 
       });
       
-      // Simple binary zoom state - let CSS handle smooth transitions
+      // Set zoom state for smooth zoom-in
+      setIsZoomingIn(true);
       setCurrentZoom(activeZoom.zoomAmount);
-      setCurrentZoomTarget({ 
-        x: activeZoom.targetX + 0.5, 
-        y: activeZoom.targetY + 0.5 
-      });
+      
+      // Delay transform origin change to prevent glitch
+      zoomTimeoutRef.current = setTimeout(() => {
+        setCurrentZoomTarget({ 
+          x: activeZoom.targetX + 0.5, 
+          y: activeZoom.targetY + 0.5 
+        });
+      }, 50); // Very short delay to let scale start first
+      
     } else {
+      // Clear any pending timeout
+      if (zoomTimeoutRef.current) {
+        clearTimeout(zoomTimeoutRef.current);
+        zoomTimeoutRef.current = null;
+      }
+      
       // Use stored values for zoom-out, then reset to center after animation
+      setIsZoomingIn(false);
       setCurrentZoom(1);
       
       // Keep last zoom target during zoom-out for consistent animation
@@ -597,9 +619,11 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                     clipPath: getClipPath(),
                     transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
                     transformOrigin: `${(currentZoomTarget.x / 7) * 100}% ${(currentZoomTarget.y / 7) * 100}%`,
-                    transition: `transform ${zoomEffects.find(zoom => 
-                      currentTime >= zoom.startTime && currentTime <= zoom.endTime
-                    )?.zoomSpeed || lastZoomSpeed}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
+                    transition: isZoomingIn 
+                      ? `transform ${zoomEffects.find(zoom => 
+                          currentTime >= zoom.startTime && currentTime <= zoom.endTime
+                        )?.zoomSpeed || lastZoomSpeed}s cubic-bezier(0.25, 0.46, 0.45, 0.94)` 
+                      : `transform ${lastZoomSpeed}s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform-origin 0.1s ease-out`,
                   }}
                   onClick={togglePlay}
                 />
