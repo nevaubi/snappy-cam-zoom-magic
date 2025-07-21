@@ -578,10 +578,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   className="max-w-full max-h-full transition-all duration-300"
                   style={{
                     clipPath: getClipPath(),
-                    transform: currentZoom !== 1 
-                      ? `scale(${currentZoom}) translate(${(currentZoomTarget.x - 4) * -25}%, ${(currentZoomTarget.y - 4) * -25}%)`
-                      : 'none',
-                    transformOrigin: 'center',
+                    transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
+                    transformOrigin: `${(currentZoomTarget.x / 7) * 100}% ${(currentZoomTarget.y / 7) * 100}%`,
                   }}
                   onClick={togglePlay}
                 />
