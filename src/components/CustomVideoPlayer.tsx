@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 import { Play, Pause } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +18,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -39,12 +41,14 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     };
     
     const handleEnded = () => setIsPlaying(false);
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
 
     // Listen to multiple events for better duration detection
     video.addEventListener('loadedmetadata', updateDuration);
     video.addEventListener('canplay', updateDuration);
     video.addEventListener('durationchange', updateDuration);
     video.addEventListener('ended', handleEnded);
+    video.addEventListener('timeupdate', handleTimeUpdate);
 
     // Set preload to ensure metadata loads
     video.preload = 'metadata';
@@ -54,6 +58,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       video.removeEventListener('canplay', updateDuration);
       video.removeEventListener('durationchange', updateDuration);
       video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
     };
   }, [onDurationLoad, src]);
 
@@ -98,6 +103,15 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     }
   };
 
+  const handleSeek = (value: number[]) => {
+    const video = videoRef.current;
+    if (!video || !duration) return;
+
+    const seekTime = (value[0] / 100) * duration;
+    video.currentTime = seekTime;
+    setCurrentTime(seekTime);
+  };
+
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
     const totalSeconds = time % 60;
@@ -115,6 +129,22 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           src={src}
           className="w-full h-auto max-h-96"
           onClick={togglePlay}
+        />
+      </div>
+      
+      {/* Timeline */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{formatTime(currentTime)}</span>
+          <span>{duration > 0 ? formatTime(duration) : 'Loading...'}</span>
+        </div>
+        
+        <Slider
+          value={[duration > 0 ? (currentTime / duration) * 100 : 0]}
+          onValueChange={handleSeek}
+          max={100}
+          step={0.1}
+          className="w-full cursor-pointer"
         />
       </div>
       
