@@ -176,15 +176,36 @@ const SimpleVideoRecorder = () => {
 
   // Video editing functions
   const handleVideoLoad = () => {
+    console.log('Video load event triggered');
     if (videoRef.current) {
       const duration = videoRef.current.duration;
-      if (duration && !isNaN(duration) && isFinite(duration)) {
+      console.log('Video duration:', duration);
+      if (duration && !isNaN(duration) && isFinite(duration) && duration > 0) {
+        console.log('Setting video duration:', duration);
         setVideoDuration(duration);
         setTrimStart(0);
         setTrimEnd(duration);
         setSplitPoints([]);
+      } else {
+        console.log('Invalid duration, retrying...');
+        // Retry after a short delay
+        setTimeout(() => {
+          if (videoRef.current && videoRef.current.duration > 0) {
+            const retryDuration = videoRef.current.duration;
+            console.log('Retry duration:', retryDuration);
+            setVideoDuration(retryDuration);
+            setTrimStart(0);
+            setTrimEnd(retryDuration);
+            setSplitPoints([]);
+          }
+        }, 100);
       }
     }
+  };
+
+  const handleVideoLoadedData = () => {
+    console.log('Video loadeddata event triggered');
+    handleVideoLoad();
   };
 
   const handleTimeUpdate = () => {
@@ -349,9 +370,12 @@ const SimpleVideoRecorder = () => {
                 src={recordedVideoUrl}
                 className="w-full max-h-96 bg-muted rounded-lg"
                 onLoadedMetadata={handleVideoLoad}
+                onLoadedData={handleVideoLoadedData}
+                onCanPlay={handleVideoLoad}
                 onTimeUpdate={handleTimeUpdate}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
+                controls
               />
               
               {/* Video Editing Controls */}

@@ -22,10 +22,10 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
   return (
     <div className="flex items-center gap-3">
       <Button
-        variant="secondary"
+        variant="outline"
         size="sm"
         onClick={onPlayPause}
-        className="flex items-center gap-2"
+        className="flex items-center gap-2 text-foreground border-border hover:bg-accent hover:text-accent-foreground"
       >
         {isPlaying ? (
           <>
@@ -41,10 +41,10 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
       </Button>
 
       <Button
-        variant="secondary"
+        variant="outline"
         size="sm"
         onClick={onGoToStart}
-        className="flex items-center gap-2"
+        className="flex items-center gap-2 text-foreground border-border hover:bg-accent hover:text-accent-foreground"
       >
         <SkipBack className="w-4 h-4" />
         Go to Start
