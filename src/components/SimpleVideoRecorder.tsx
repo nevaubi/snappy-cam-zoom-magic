@@ -263,15 +263,22 @@ const SimpleVideoRecorder = () => {
 
   // Video editing functions with custom renderer
   const handleVideoLoadedData = () => {
+    console.log('Video loaded data event triggered');
     const renderer = videoRendererRef.current;
     if (renderer) {
       const duration = renderer.getDuration();
+      console.log('Video duration from renderer:', duration);
       if (duration && !isNaN(duration) && isFinite(duration) && duration > 0) {
         setVideoDuration(duration);
         setTrimStart(0);
         setTrimEnd(duration);
         setSplitPoints([]);
+        console.log('Video duration set successfully:', duration);
+      } else {
+        console.warn('Invalid video duration detected:', duration);
       }
+    } else {
+      console.warn('Video renderer ref not available');
     }
   };
 
@@ -473,21 +480,24 @@ const SimpleVideoRecorder = () => {
                 </div>
               )}
               
-              {/* Video Editing Controls */}
-              {videoDuration > 0 && (
-                <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-sm font-medium">Video Editor</h4>
-                    <VideoControls
-                      isPlaying={isPlaying}
-                      onPlayPause={handlePlayPause}
-                      onGoToStart={handleGoToStart}
-                      onExport={handleExport}
-                      isExporting={isExporting}
-                      hasEdits={hasEdits}
-                    />
-                  </div>
-                  
+              {/* Video Editing Controls - Always show when video exists */}
+              <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-sm font-medium">
+                    Video Editor {videoDuration > 0 ? `(${Math.round(videoDuration)}s)` : '(Loading...)'}
+                  </h4>
+                  <VideoControls
+                    isPlaying={isPlaying}
+                    onPlayPause={handlePlayPause}
+                    onGoToStart={handleGoToStart}
+                    onExport={handleExport}
+                    isExporting={isExporting}
+                    hasEdits={hasEdits}
+                  />
+                </div>
+                
+                {/* Show timeline if duration is available, otherwise show loading state */}
+                {videoDuration > 0 ? (
                   <VideoTimeline
                     videoRef={null}
                     duration={videoDuration}
@@ -499,16 +509,21 @@ const SimpleVideoRecorder = () => {
                     trimEnd={trimEnd}
                     splitPoints={splitPoints}
                   />
-                  
-                  {splitPoints.length > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      Split points: {splitPoints.map(time => 
-                        `${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`
-                      ).join(', ')}
-                    </div>
-                  )}
-                </div>
-              )}
+                ) : (
+                  <div className="text-sm text-muted-foreground p-4 text-center">
+                    Loading video metadata...
+                  </div>
+                )}
+                
+                {/* Split Points Display */}
+                {splitPoints.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Split points: {splitPoints.map(time => 
+                      `${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`
+                    ).join(', ')}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -51,10 +51,16 @@ export const SimpleVideoRenderer = forwardRef<SimpleVideoRendererRef, SimpleVide
 
     // Handle video metadata loaded
     const handleLoadedData = () => {
+      console.log('SimpleVideoRenderer: handleLoadedData called');
       if (videoRef.current) {
         const videoDuration = videoRef.current.duration;
+        console.log('SimpleVideoRenderer: video duration:', videoDuration);
+        console.log('SimpleVideoRenderer: video readyState:', videoRef.current.readyState);
+        console.log('SimpleVideoRenderer: video src:', videoRef.current.src);
         setDuration(videoDuration);
         onLoadedData();
+      } else {
+        console.warn('SimpleVideoRenderer: videoRef.current is null');
       }
     };
 
