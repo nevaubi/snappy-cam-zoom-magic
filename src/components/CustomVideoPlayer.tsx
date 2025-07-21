@@ -519,14 +519,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       
       // Simple binary zoom state - let CSS handle smooth transitions
       setCurrentZoom(activeZoom.zoomAmount);
-      
-      // Delay transform origin change until zoom-in animation completes
-      setTimeout(() => {
-        setCurrentZoomTarget({ 
-          x: activeZoom.targetX + 0.5, 
-          y: activeZoom.targetY + 0.5 
-        });
-      }, (activeZoom.zoomSpeed || 0.15) * 1000);
+      setCurrentZoomTarget({ 
+        x: activeZoom.targetX + 0.5, 
+        y: activeZoom.targetY + 0.5 
+      });
     } else {
       // Use stored values for zoom-out, then reset to center after animation
       setCurrentZoom(1);
