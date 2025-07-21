@@ -62,12 +62,14 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
   const [currentZoom, setCurrentZoom] = useState(1); // Current zoom level applied to video
   const [currentZoomTarget, setCurrentZoomTarget] = useState({ x: 3.5, y: 3.5 }); // Center by default
-  const [isZoomingIn, setIsZoomingIn] = useState(false);
-  const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Store last active zoom properties for smooth zoom-out
+  // Store last active zoom properties for smooth zoom-out only
   const [lastZoomSpeed, setLastZoomSpeed] = useState(0.15);
   const [lastZoomTarget, setLastZoomTarget] = useState({ x: 3.5, y: 3.5 });
+  
+  // Track processed zoom effects to prevent duplicate updates
+  const lastProcessedZoomRef = useRef<string | null>(null);
+  const zoomOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Background color presets
   const colorPresets = [
@@ -499,12 +501,23 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     ));
   };
 
+  // Reset zoom state when zoom effects are modified
+  useEffect(() => {
+    // Clear any pending timeouts when zoom effects change
+    if (zoomOutTimeoutRef.current) {
+      clearTimeout(zoomOutTimeoutRef.current);
+      zoomOutTimeoutRef.current = null;
+    }
+    
+    // Reset processed zoom tracking
+    lastProcessedZoomRef.current = null;
+  }, [zoomEffects]);
+
   // Apply zoom effects during video playback
   useEffect(() => {
     if (!videoRef.current || zoomEffects.length === 0) {
       setCurrentZoom(1);
       setCurrentZoomTarget({ x: 3.5, y: 3.5 });
-      setIsZoomingIn(false);
       return;
     }
 
@@ -513,12 +526,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     );
 
     if (activeZoom) {
-      // Clear any pending timeout
-      if (zoomTimeoutRef.current) {
-        clearTimeout(zoomTimeoutRef.current);
-        zoomTimeoutRef.current = null;
+      // Prevent duplicate processing of the same zoom effect
+      if (lastProcessedZoomRef.current === activeZoom.id) {
+        return;
       }
-
+      
+      // Clear any pending zoom-out timeout
+      if (zoomOutTimeoutRef.current) {
+        clearTimeout(zoomOutTimeoutRef.current);
+        zoomOutTimeoutRef.current = null;
+      }
+      
       // Store zoom properties for consistent zoom-out
       setLastZoomSpeed(activeZoom.zoomSpeed || 0.15);
       setLastZoomTarget({ 
@@ -526,35 +544,36 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         y: activeZoom.targetY + 0.5 
       });
       
-      // Set zoom state for smooth zoom-in
-      setIsZoomingIn(true);
+      // Set zoom state immediately - no delays or timers
       setCurrentZoom(activeZoom.zoomAmount);
+      setCurrentZoomTarget({ 
+        x: activeZoom.targetX + 0.5, 
+        y: activeZoom.targetY + 0.5 
+      });
       
-      // Delay transform origin change to prevent glitch
-      zoomTimeoutRef.current = setTimeout(() => {
-        setCurrentZoomTarget({ 
-          x: activeZoom.targetX + 0.5, 
-          y: activeZoom.targetY + 0.5 
-        });
-      }, 50); // Very short delay to let scale start first
+      // Track that we've processed this zoom
+      lastProcessedZoomRef.current = activeZoom.id;
       
-    } else {
-      // Clear any pending timeout
-      if (zoomTimeoutRef.current) {
-        clearTimeout(zoomTimeoutRef.current);
-        zoomTimeoutRef.current = null;
-      }
-      
-      // Use stored values for zoom-out, then reset to center after animation
-      setIsZoomingIn(false);
+    } else if (lastProcessedZoomRef.current !== null) {
+      // Only trigger zoom-out if we were previously zoomed in
       setCurrentZoom(1);
       
-      // Keep last zoom target during zoom-out for consistent animation
-      setTimeout(() => {
+      // Use timeout only for resetting to center after zoom-out completes
+      zoomOutTimeoutRef.current = setTimeout(() => {
         setCurrentZoomTarget({ x: 3.5, y: 3.5 });
+        lastProcessedZoomRef.current = null;
       }, lastZoomSpeed * 1000);
     }
   }, [currentTime, zoomEffects, lastZoomSpeed]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (zoomOutTimeoutRef.current) {
+        clearTimeout(zoomOutTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Zoom presets data
   const zoomAmounts = [
@@ -619,11 +638,11 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                     clipPath: getClipPath(),
                     transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
                     transformOrigin: `${(currentZoomTarget.x / 7) * 100}% ${(currentZoomTarget.y / 7) * 100}%`,
-                    transition: isZoomingIn 
-                      ? `transform ${zoomEffects.find(zoom => 
-                          currentTime >= zoom.startTime && currentTime <= zoom.endTime
-                        )?.zoomSpeed || lastZoomSpeed}s cubic-bezier(0.25, 0.46, 0.45, 0.94)` 
-                      : `transform ${lastZoomSpeed}s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform-origin 0.1s ease-out`,
+                    transition: `transform ${
+                      zoomEffects.find(zoom => 
+                        currentTime >= zoom.startTime && currentTime <= zoom.endTime
+                      )?.zoomSpeed || lastZoomSpeed
+                    }s cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
                   }}
                   onClick={togglePlay}
                 />
