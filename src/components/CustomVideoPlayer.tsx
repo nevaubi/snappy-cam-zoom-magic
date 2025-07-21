@@ -266,7 +266,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     <div className={cn("space-y-4", className)}>
       {/* Video Display */}
       <div 
-        className="relative rounded-lg overflow-hidden h-96 flex items-center justify-center transition-all duration-300"
+        className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
         style={{
           backgroundColor: backgroundColor,
         }}
