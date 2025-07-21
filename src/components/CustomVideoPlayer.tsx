@@ -726,7 +726,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   <select 
                     value={backgroundImageFit}
                     onChange={(e) => setBackgroundImageFit(e.target.value as 'cover' | 'contain' | 'fill')}
-                    className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm"
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground text-sm"
                   >
                     <option value="cover">Cover (fill area, may crop)</option>
                     <option value="contain">Contain (fit within area)</option>
