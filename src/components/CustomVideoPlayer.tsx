@@ -88,6 +88,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         await video.pause();
         setIsPlaying(false);
       } else {
+        // If current time is outside trim range, start from trim start
+        if (video.currentTime < trimStart || video.currentTime >= trimEnd) {
+          video.currentTime = trimStart;
+          setCurrentTime(trimStart);
+        }
+        
         await video.play();
         setIsPlaying(true);
       }
@@ -101,6 +107,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     if (!video) return;
 
     try {
+      // If current time is outside trim range, start from trim start
+      if (video.currentTime < trimStart || video.currentTime >= trimEnd) {
+        video.currentTime = trimStart;
+        setCurrentTime(trimStart);
+      }
+      
       await video.play();
       setIsPlaying(true);
     } catch (error) {
@@ -122,9 +134,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const handleSeek = (value: number[]) => {
     const video = videoRef.current;
-    if (!video || !duration) return;
+    if (!video || !duration || trimEnd <= trimStart) return;
 
-    const seekTime = (value[0] / 100) * duration;
+    // Calculate seek time within trim range
+    const trimDuration = trimEnd - trimStart;
+    const seekTime = trimStart + (value[0] / 100) * trimDuration;
+    
     video.currentTime = seekTime;
     setCurrentTime(seekTime);
   };
@@ -151,14 +166,26 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     const x = e.clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, x / rect.width));
     const time = percentage * duration;
+    const video = videoRef.current;
 
     if (isDragging === 'start') {
-      setTrimStart(Math.min(time, trimEnd - 0.1));
+      const newTrimStart = Math.max(0, Math.min(time, trimEnd - 0.5));
+      setTrimStart(newTrimStart);
+      // Show real-time preview while dragging
+      if (video) {
+        video.currentTime = newTrimStart;
+        setCurrentTime(newTrimStart);
+      }
     } else if (isDragging === 'end') {
-      setTrimEnd(Math.max(time, trimStart + 0.1));
+      const newTrimEnd = Math.min(duration, Math.max(time, trimStart + 0.5));
+      setTrimEnd(newTrimEnd);
+      // Show real-time preview while dragging
+      if (video) {
+        video.currentTime = newTrimEnd;
+        setCurrentTime(newTrimEnd);
+      }
     } else if (isDragging === 'scrub') {
       const clampedTime = Math.max(trimStart, Math.min(trimEnd, time));
-      const video = videoRef.current;
       if (video) {
         video.currentTime = clampedTime;
         setCurrentTime(clampedTime);
@@ -204,12 +231,20 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       {/* Timeline */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{formatTime(currentTime)}</span>
-          <span>{duration > 0 ? formatTime(duration) : 'Loading...'}</span>
+          <span>{formatTime(currentTime - trimStart)}</span>
+          <span>{
+            trimEnd > trimStart 
+              ? formatTime(trimEnd - trimStart) 
+              : (duration > 0 ? formatTime(duration) : 'Loading...')
+          }</span>
         </div>
         
         <Slider
-          value={[duration > 0 ? (currentTime / duration) * 100 : 0]}
+          value={[
+            trimEnd > trimStart 
+              ? ((currentTime - trimStart) / (trimEnd - trimStart)) * 100 
+              : 0
+          ]}
           onValueChange={handleSeek}
           max={100}
           step={0.1}
