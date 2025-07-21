@@ -234,7 +234,7 @@ const SimpleVideoRecorder = () => {
 
   return (
     <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="mx-4 md:mx-8 lg:mx-12 xl:mx-16 space-y-6">
         <Card className="p-6">
           <h1 className="text-2xl font-bold mb-6">Screen Recorder</h1>
           
