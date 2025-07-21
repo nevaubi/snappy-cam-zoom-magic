@@ -37,32 +37,49 @@ export const useVideoProcessor = () => {
         const ffmpeg = new FFmpeg();
         ffmpegInstance = ffmpeg;
 
-        // Try multiple CDN sources with matching versions
-        const cdnSources = [
-          'https://unpkg.com/@ffmpeg/core@0.12.15/dist/umd',
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.15/dist/umd',
-          'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd', // Fallback
-        ];
+        // Try local files first (served by Vite dev server)
+        try {
+          console.log('Attempting to load FFmpeg from local files...');
+          
+          const baseURL = '/node_modules/@ffmpeg/core/dist/umd';
+          
+          await ffmpeg.load({
+            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+          });
+          
+          console.log('FFmpeg loaded successfully from local files');
+          isFFmpegLoaded = true;
+          return;
+        } catch (localError) {
+          console.warn('Failed to load from local files:', localError);
+          
+          // Fallback to CDN with matching versions
+          const cdnSources = [
+            'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
+            'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
+          ];
 
-        let loaded = false;
-        for (const baseURL of cdnSources) {
-          try {
-            console.log(`Attempting to load FFmpeg from: ${baseURL}`);
-            await ffmpeg.load({
-              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-            });
-            loaded = true;
-            console.log(`FFmpeg loaded successfully from: ${baseURL}`);
-            break;
-          } catch (error) {
-            console.warn(`Failed to load from ${baseURL}:`, error);
-            continue;
+          let loaded = false;
+          for (const baseURL of cdnSources) {
+            try {
+              console.log(`Attempting to load FFmpeg from CDN: ${baseURL}`);
+              await ffmpeg.load({
+                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+              });
+              loaded = true;
+              console.log(`FFmpeg loaded successfully from CDN: ${baseURL}`);
+              break;
+            } catch (error) {
+              console.warn(`Failed to load from CDN ${baseURL}:`, error);
+              continue;
+            }
           }
-        }
 
-        if (!loaded) {
-          throw new Error('Failed to load FFmpeg from all CDN sources');
+          if (!loaded) {
+            throw new Error('Failed to load FFmpeg from all sources (local and CDN)');
+          }
         }
 
         isFFmpegLoaded = true;
@@ -183,7 +200,7 @@ export const useVideoProcessor = () => {
     
     // Clean up
     await ffmpeg.deleteFile('input.webm');
-    await ffmpeg.deleteFile('output.webv');
+    await ffmpeg.deleteFile('output.webm');
     
     console.log('Video processing completed');
     return new Blob([data], { type: 'video/webm' });
