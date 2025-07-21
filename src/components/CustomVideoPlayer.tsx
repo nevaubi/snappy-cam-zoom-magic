@@ -100,8 +100,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    const totalSeconds = time % 60;
+    const wholeSeconds = Math.floor(totalSeconds);
+    const tenths = Math.floor((totalSeconds - wholeSeconds) * 10);
+    return `${minutes}:${wholeSeconds.toString().padStart(2, '0')}${tenths}`;
   };
 
   return (
