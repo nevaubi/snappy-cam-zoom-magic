@@ -493,12 +493,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     ));
   };
 
-  // Easing function for smooth transitions
-  const easeInOutCubic = (t: number): number => {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  };
-
-  // Apply zoom effects during video playback with smooth transitions
+  // Apply zoom effects during video playback
   useEffect(() => {
     if (!videoRef.current || zoomEffects.length === 0) {
       setCurrentZoom(1);
@@ -511,29 +506,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     );
 
     if (activeZoom) {
-      const effectDuration = activeZoom.endTime - activeZoom.startTime;
-      const timeInEffect = currentTime - activeZoom.startTime;
-      const transitionDuration = Math.min(activeZoom.zoomSpeed, effectDuration / 2);
-      
-      let progress = 1; // Default to full zoom
-      let zoomMultiplier = 1;
-      
-      // Calculate smooth zoom in/out progress
-      if (timeInEffect <= transitionDuration) {
-        // Zoom in phase
-        progress = easeInOutCubic(timeInEffect / transitionDuration);
-        zoomMultiplier = 1 + (activeZoom.zoomAmount - 1) * progress;
-      } else if (timeInEffect >= effectDuration - transitionDuration) {
-        // Zoom out phase
-        const timeInExitPhase = timeInEffect - (effectDuration - transitionDuration);
-        progress = 1 - easeInOutCubic(timeInExitPhase / transitionDuration);
-        zoomMultiplier = 1 + (activeZoom.zoomAmount - 1) * progress;
-      } else {
-        // Hold phase - maintain full zoom
-        zoomMultiplier = activeZoom.zoomAmount;
-      }
-      
-      setCurrentZoom(zoomMultiplier);
+      setCurrentZoom(activeZoom.zoomAmount);
       setCurrentZoomTarget({ 
         x: activeZoom.targetX + 0.5, 
         y: activeZoom.targetY + 0.5 
@@ -602,7 +575,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   ref={videoRef}
                   src={src}
                   crossOrigin="anonymous"
-                  className="max-w-full max-h-full transition-transform duration-75 ease-out"
+                  className="max-w-full max-h-full transition-all duration-300"
                   style={{
                     clipPath: getClipPath(),
                     transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
