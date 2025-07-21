@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
+import bgLivingRoom from '@/assets/bg-living-room.jpg';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -28,6 +30,11 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [videoPadding, setVideoPadding] = useState(0);
   const [videoCornerRadius, setVideoCornerRadius] = useState(8);
   const [backgroundColor, setBackgroundColor] = useState('#000000');
+  
+  // Background image states
+  const [backgroundType, setBackgroundType] = useState<'color' | 'image'>('color');
+  const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [backgroundImageFit, setBackgroundImageFit] = useState<'cover' | 'contain' | 'fill'>('cover');
   
   // Crop states
   const [isCropMode, setIsCropMode] = useState(false);
@@ -55,6 +62,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     { name: 'Green', value: '#10b981' },
     { name: 'Red', value: '#ef4444' },
     { name: 'Purple', value: '#8b5cf6' },
+  ];
+
+  // Default background images
+  const defaultImages = [
+    { name: 'Ocean Wave', src: bgOceanWave },
+    { name: 'Living Room', src: bgLivingRoom },
   ];
   
   // Use refs to store current values for stable callbacks
@@ -366,6 +379,36 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     setAppliedCropSettings({ x: 0, y: 0, width: 100, height: 100 });
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      console.warn('Please select an image file');
+      return;
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      console.warn('File size should be less than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setBackgroundImage(result);
+      setBackgroundType('image');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const selectDefaultImage = (src: string) => {
+    setBackgroundImage(src);
+    setBackgroundType('image');
+  };
+
   const getClipPath = () => {
     const crop = isCropMode ? cropSettings : appliedCropSettings;
     
@@ -400,7 +443,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       <div 
         className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
         style={{
-          backgroundColor: backgroundColor,
+          ...(backgroundType === 'color' 
+            ? { backgroundColor } 
+            : backgroundImage 
+              ? { 
+                  backgroundImage: `url(${backgroundImage})`,
+                  backgroundSize: backgroundImageFit,
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat'
+                }
+              : { backgroundColor }
+          ),
         }}
       >
         <div 
@@ -599,25 +652,121 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm text-muted-foreground">Background Color</label>
-          <div className="flex flex-wrap gap-2">
-            {colorPresets.map((color) => (
-              <button
-                key={color.value}
-                onClick={() => setBackgroundColor(color.value)}
-                className={cn(
-                  "w-8 h-8 rounded-full border-2 transition-all duration-200 hover:scale-110",
-                  backgroundColor === color.value 
-                    ? "border-primary shadow-lg scale-110" 
-                    : "border-border hover:border-muted-foreground"
-                )}
-                style={{ backgroundColor: color.value }}
-                title={color.name}
-                aria-label={`Set background to ${color.name}`}
-              />
-            ))}
+        <div className="space-y-4">
+          <label className="text-sm text-muted-foreground">Background</label>
+          
+          {/* Background type selector */}
+          <div className="flex gap-2 mb-3">
+            <Button 
+              variant={backgroundType === 'color' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setBackgroundType('color')}
+              className="flex items-center gap-2"
+            >
+              <Palette className="w-4 h-4" />
+              Color
+            </Button>
+            <Button 
+              variant={backgroundType === 'image' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setBackgroundType('image')}
+              className="flex items-center gap-2"
+            >
+              <ImageIcon className="w-4 h-4" />
+              Image
+            </Button>
           </div>
+
+          {/* Color presets */}
+          {backgroundType === 'color' && (
+            <div className="flex flex-wrap gap-2">
+              {colorPresets.map((color) => (
+                <button
+                  key={color.value}
+                  onClick={() => setBackgroundColor(color.value)}
+                  className={cn(
+                    "w-8 h-8 rounded-full border-2 transition-all duration-200 hover:scale-110",
+                    backgroundColor === color.value 
+                      ? "border-primary shadow-lg scale-110" 
+                      : "border-border hover:border-muted-foreground"
+                  )}
+                  style={{ backgroundColor: color.value }}
+                  title={color.name}
+                  aria-label={`Set background to ${color.name}`}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Image options */}
+          {backgroundType === 'image' && (
+            <div className="space-y-3">
+              {/* Default images */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block">Default Images</label>
+                <div className="flex gap-2">
+                  {defaultImages.map((image) => (
+                    <button
+                      key={image.name}
+                      onClick={() => selectDefaultImage(image.src)}
+                      className={cn(
+                        "w-16 h-16 rounded-md border-2 transition-all duration-200 hover:scale-105 bg-cover bg-center",
+                        backgroundImage === image.src ? "border-primary shadow-lg scale-105" : "border-border hover:border-muted-foreground"
+                      )}
+                      style={{ backgroundImage: `url(${image.src})` }}
+                      title={image.name}
+                      aria-label={`Set background to ${image.name}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom upload */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block">Upload Custom Image</label>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 px-3 py-2 border border-input rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
+                    <Upload className="w-4 h-4" />
+                    <span className="text-sm">Choose Image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  {backgroundImage && !defaultImages.some(img => img.src === backgroundImage) && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setBackgroundImage(null);
+                        setBackgroundType('color');
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Image fit controls */}
+              {backgroundImage && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-2 block">Image Fit</label>
+                  <select 
+                    value={backgroundImageFit}
+                    onChange={(e) => setBackgroundImageFit(e.target.value as 'cover' | 'contain' | 'fill')}
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm"
+                  >
+                    <option value="cover">Cover (fill area, may crop)</option>
+                    <option value="contain">Contain (fit within area)</option>
+                    <option value="fill">Fill (stretch to fit)</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
