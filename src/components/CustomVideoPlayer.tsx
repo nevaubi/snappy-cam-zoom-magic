@@ -663,30 +663,9 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             Background Settings
           </h3>
           
-          {/* Background type selector */}
-          <div className="flex gap-2 mb-3">
-            <Button 
-              variant={backgroundType === 'color' ? 'default' : 'outline'} 
-              size="sm"
-              onClick={() => setBackgroundType('color')}
-              className="flex items-center gap-2"
-            >
-              <Palette className="w-4 h-4" />
-              Color
-            </Button>
-            <Button 
-              variant={backgroundType === 'image' ? 'default' : 'outline'} 
-              size="sm"
-              onClick={() => setBackgroundType('image')}
-              className="flex items-center gap-2"
-            >
-              <ImageIcon className="w-4 h-4" />
-              Image
-            </Button>
-          </div>
-
           {/* Color presets */}
-          {backgroundType === 'color' && (
+          <div>
+            <label className="text-xs text-muted-foreground mb-2 block">Color Presets</label>
             <div className="flex flex-wrap gap-2">
               {colorPresets.map((color) => (
                 <button
@@ -704,10 +683,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                 />
               ))}
             </div>
-          )}
+          </div>
 
           {/* Image options */}
-          {backgroundType === 'image' && (
+          <div className="space-y-3">
             <div className="space-y-3">
               {/* Default images */}
               <div>
@@ -774,7 +753,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
