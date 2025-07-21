@@ -59,7 +59,6 @@ const SimpleVideoRecorder = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const recordedBlobRef = useRef<Blob | null>(null);
 
   const getSupportedMimeType = (preferredType: string): string => {
     const fallbacks = [
@@ -84,15 +83,14 @@ const SimpleVideoRecorder = () => {
       setError('');
       const config = QUALITY_PRESETS[quality];
       
-      // Enhanced screen capture with quality constraints and cursor
+      // Enhanced screen capture with quality constraints
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: { ideal: config.resolution.width },
           height: { ideal: config.resolution.height },
           frameRate: { ideal: config.frameRate },
-          displaySurface: 'monitor',
-          cursor: 'always'
-        } as any,
+          displaySurface: 'monitor'
+        },
         audio: {
           sampleRate: 48000,
           channelCount: 2,
@@ -128,9 +126,6 @@ const SimpleVideoRecorder = () => {
         const url = URL.createObjectURL(blob);
         setRecordedVideoUrl(url);
         setIsRecording(false);
-        
-        // Store blob for video processing
-        recordedBlobRef.current = blob;
         
         // Upload to Supabase
         await uploadVideoToSupabase(blob, mimeType);
@@ -323,7 +318,7 @@ const SimpleVideoRecorder = () => {
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <h3 className="text-sm font-medium">Cloud Video Ready</h3>
               </div>
-              <CustomVideoPlayer src={supabaseVideoUrl} className="w-full" originalVideoBlob={recordedBlobRef.current || undefined} />
+              <CustomVideoPlayer src={supabaseVideoUrl} className="w-full" />
             </div>
           ) : recordedVideoUrl && !isUploading ? (
             <div className="space-y-2">
@@ -331,7 +326,7 @@ const SimpleVideoRecorder = () => {
                 <AlertCircle className="w-4 h-4 text-yellow-500" />
                 <h3 className="text-sm font-medium">Local Video (Upload Failed)</h3>
               </div>
-              <CustomVideoPlayer src={recordedVideoUrl} className="w-full" originalVideoBlob={recordedBlobRef.current || undefined} />
+              <CustomVideoPlayer src={recordedVideoUrl} className="w-full" />
             </div>
           ) : null}
 
