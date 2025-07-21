@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CustomVideoPlayerProps {
@@ -16,9 +16,13 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   onDurationLoad 
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const trimmerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [isDragging, setIsDragging] = useState<'start' | 'end' | 'scrub' | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -35,13 +39,26 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       
       console.log('Valid duration detected:', videoDuration);
       setDuration(videoDuration);
+      setTrimStart(0);
+      setTrimEnd(videoDuration);
       if (onDurationLoad) {
         onDurationLoad(videoDuration);
       }
     };
     
     const handleEnded = () => setIsPlaying(false);
-    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+    const handleTimeUpdate = () => {
+      const currentTime = video.currentTime;
+      setCurrentTime(currentTime);
+      
+      // If video reaches trim end, pause or loop back
+      if (trimEnd > 0 && currentTime >= trimEnd) {
+        video.pause();
+        setIsPlaying(false);
+        // Optional: Loop back to start of trim
+        // video.currentTime = trimStart;
+      }
+    };
 
     // Listen to multiple events for better duration detection
     video.addEventListener('loadedmetadata', updateDuration);
@@ -120,6 +137,57 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     return `${minutes}:${wholeSeconds.toString().padStart(2, '0')}${tenths}`;
   };
 
+  // Trimming functions
+  const handleTrimMouseDown = (e: React.MouseEvent, type: 'start' | 'end' | 'scrub') => {
+    e.preventDefault();
+    setIsDragging(type);
+  };
+
+  const handleTrimMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging || !trimmerRef.current || !duration) return;
+
+    const rect = trimmerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, x / rect.width));
+    const time = percentage * duration;
+
+    if (isDragging === 'start') {
+      setTrimStart(Math.min(time, trimEnd - 0.1));
+    } else if (isDragging === 'end') {
+      setTrimEnd(Math.max(time, trimStart + 0.1));
+    } else if (isDragging === 'scrub') {
+      const clampedTime = Math.max(trimStart, Math.min(trimEnd, time));
+      const video = videoRef.current;
+      if (video) {
+        video.currentTime = clampedTime;
+        setCurrentTime(clampedTime);
+      }
+    }
+  }, [isDragging, duration, trimStart, trimEnd]);
+
+  const handleTrimMouseUp = useCallback(() => {
+    setIsDragging(null);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleTrimMouseMove);
+      document.addEventListener('mouseup', handleTrimMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleTrimMouseMove);
+      document.removeEventListener('mouseup', handleTrimMouseUp);
+    };
+  }, [isDragging, handleTrimMouseMove, handleTrimMouseUp]);
+
+  const resetTrim = () => {
+    setTrimStart(0);
+    setTrimEnd(duration);
+  };
+
+  const getTrimmedDuration = () => trimEnd - trimStart;
+
   return (
     <div className={cn("space-y-4", className)}>
       {/* Video Display */}
@@ -177,7 +245,94 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             'Duration: Loading...'
           )}
         </span>
+
+        <Button
+          onClick={resetTrim}
+          variant="ghost"
+          size="sm"
+          disabled={trimStart === 0 && trimEnd === duration}
+        >
+          <RotateCcw className="h-4 w-4 mr-2" />
+          Reset Trim
+        </Button>
       </div>
+
+      {/* Video Trimming Component */}
+      {duration > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{formatTime(trimStart)}</span>
+            <span className="font-medium">Trimmed: {formatTime(getTrimmedDuration())}</span>
+            <span>{formatTime(trimEnd)}</span>
+          </div>
+          
+          <div 
+            ref={trimmerRef}
+            className="relative w-full h-12 bg-muted rounded-lg cursor-pointer select-none"
+            onMouseDown={(e) => {
+              const rect = trimmerRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              const x = e.clientX - rect.left;
+              const percentage = x / rect.width;
+              const time = percentage * duration;
+              
+              // Check if clicking within trim range for scrubbing
+              if (time >= trimStart && time <= trimEnd) {
+                handleTrimMouseDown(e, 'scrub');
+              }
+            }}
+          >
+            {/* Full timeline background */}
+            <div className="absolute inset-0 bg-muted-foreground/20 rounded-lg" />
+            
+            {/* Trimmed section highlight */}
+            <div 
+              className="absolute top-0 bottom-0 bg-primary/30 border-t-2 border-b-2 border-primary"
+              style={{
+                left: `${(trimStart / duration) * 100}%`,
+                width: `${((trimEnd - trimStart) / duration) * 100}%`,
+              }}
+            />
+            
+            {/* Current time indicator */}
+            <div 
+              className="absolute top-0 bottom-0 w-0.5 bg-foreground z-10"
+              style={{
+                left: `${(currentTime / duration) * 100}%`,
+              }}
+            />
+            
+            {/* Start handle */}
+            <div 
+              className={cn(
+                "absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
+                isDragging === 'start' && "bg-primary/80"
+              )}
+              style={{
+                left: `${(trimStart / duration) * 100}%`,
+              }}
+              onMouseDown={(e) => handleTrimMouseDown(e, 'start')}
+            >
+              <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
+            </div>
+            
+            {/* End handle */}
+            <div 
+              className={cn(
+                "absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
+                isDragging === 'end' && "bg-primary/80"
+              )}
+              style={{
+                left: `${(trimEnd / duration) * 100}%`,
+                transform: 'translateX(-100%)',
+              }}
+              onMouseDown={(e) => handleTrimMouseDown(e, 'end')}
+            >
+              <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
