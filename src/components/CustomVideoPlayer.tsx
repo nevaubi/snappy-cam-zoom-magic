@@ -1,13 +1,20 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CustomVideoPlayerProps {
   src: string;
   className?: string;
   onDurationLoad?: (duration: number) => void;
+}
+
+interface CropSettings {
+  x: number; // percentage from left
+  y: number; // percentage from top
+  width: number; // percentage of video width
+  height: number; // percentage of video height
 }
 
 export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ 
@@ -17,6 +24,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trimmerRef = useRef<HTMLDivElement>(null);
+  const cropOverlayRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -28,6 +36,18 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [videoPadding, setVideoPadding] = useState(0);
   const [videoCornerRadius, setVideoCornerRadius] = useState(8);
   const [backgroundColor, setBackgroundColor] = useState('#000000');
+  
+  // Crop states
+  const [isCropMode, setIsCropMode] = useState(false);
+  const [cropSettings, setCropSettings] = useState<CropSettings>({
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100
+  });
+  const [isDraggingCrop, setIsDraggingCrop] = useState<string | null>(null);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [cropStart, setCropStart] = useState<CropSettings>({ x: 0, y: 0, width: 100, height: 100 });
   
   // Background color presets
   const colorPresets = [
@@ -66,7 +86,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     const updateDuration = () => {
       const videoDuration = video.duration;
       
-      // Validate duration before using it
       if (isNaN(videoDuration) || !isFinite(videoDuration) || videoDuration <= 0) {
         console.warn('Invalid video duration detected:', videoDuration);
         return;
@@ -75,7 +94,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       console.log('Valid duration detected:', videoDuration, 'Has initialized trim:', hasInitializedTrim.current);
       setDuration(videoDuration);
       
-      // Only set initial trim values if not already initialized
       if (!hasInitializedTrim.current) {
         console.log('Setting initial trim values:', 0, 'to', videoDuration);
         setTrimStart(0);
@@ -93,23 +111,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       const currentTime = video.currentTime;
       setCurrentTime(currentTime);
       
-      // If video reaches trim end, pause or loop back (using refs for stable values)
       if (trimEndRef.current > 0 && currentTime >= trimEndRef.current) {
         video.pause();
         setIsPlaying(false);
-        // Optional: Loop back to start of trim
-        // video.currentTime = trimStartRef.current;
       }
     };
 
-    // Listen to multiple events for better duration detection
     video.addEventListener('loadedmetadata', updateDuration);
     video.addEventListener('canplay', updateDuration);
     video.addEventListener('durationchange', updateDuration);
     video.addEventListener('ended', handleEnded);
     video.addEventListener('timeupdate', handleTimeUpdate);
-
-    // Set preload to ensure metadata loads
     video.preload = 'metadata';
 
     return () => {
@@ -130,7 +142,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         await video.pause();
         setIsPlaying(false);
       } else {
-        // If current time is outside trim range, start from trim start
         if (video.currentTime < trimStart || video.currentTime >= trimEnd) {
           video.currentTime = trimStart;
           setCurrentTime(trimStart);
@@ -149,7 +160,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     if (!video) return;
 
     try {
-      // If current time is outside trim range, start from trim start
       if (video.currentTime < trimStart || video.currentTime >= trimEnd) {
         video.currentTime = trimStart;
         setCurrentTime(trimStart);
@@ -178,7 +188,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     const video = videoRef.current;
     if (!video || !duration || trimEnd <= trimStart) return;
 
-    // Calculate seek time within trim range
     const trimDuration = trimEnd - trimStart;
     const seekTime = trimStart + (value[0] / 100) * trimDuration;
     
@@ -194,7 +203,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     return `${minutes}:${wholeSeconds.toString().padStart(2, '0')}${tenths}`;
   };
 
-  // Trimming functions
   const handleTrimMouseDown = (e: React.MouseEvent, type: 'start' | 'end' | 'scrub') => {
     e.preventDefault();
     e.stopPropagation();
@@ -216,7 +224,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       const newTrimStart = Math.max(0, Math.min(time, trimEndRef.current - 0.5));
       console.log('Setting trimStart to:', newTrimStart);
       setTrimStart(newTrimStart);
-      // Show real-time preview while dragging
       if (video) {
         video.currentTime = newTrimStart;
         setCurrentTime(newTrimStart);
@@ -225,7 +232,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       const newTrimEnd = Math.min(durationRef.current, Math.max(time, trimStartRef.current + 0.5));
       console.log('Setting trimEnd to:', newTrimEnd);
       setTrimEnd(newTrimEnd);
-      // Show real-time preview while dragging
       if (video) {
         video.currentTime = newTrimEnd;
         setCurrentTime(newTrimEnd);
@@ -237,7 +243,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         setCurrentTime(clampedTime);
       }
     }
-  }, [isDragging]); // Only isDragging as dependency
+  }, [isDragging]);
 
   const handleTrimMouseUp = useCallback(() => {
     setIsDragging(null);
@@ -263,6 +269,107 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const getTrimmedDuration = () => trimEnd - trimStart;
 
+  const toggleCropMode = () => {
+    setIsCropMode(!isCropMode);
+    if (!isCropMode) {
+      setCropSettings({ x: 0, y: 0, width: 100, height: 100 });
+    }
+  };
+
+  const handleCropMouseDown = (e: React.MouseEvent, handle: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const rect = cropOverlayRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
+    setIsDraggingCrop(handle);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setCropStart({ ...cropSettings });
+  };
+
+  const handleCropMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDraggingCrop || !cropOverlayRef.current) return;
+    
+    const rect = cropOverlayRef.current.getBoundingClientRect();
+    const deltaX = ((e.clientX - dragStart.x) / rect.width) * 100;
+    const deltaY = ((e.clientY - dragStart.y) / rect.height) * 100;
+    
+    let newCrop = { ...cropStart };
+    
+    switch (isDraggingCrop) {
+      case 'move':
+        newCrop.x = Math.max(0, Math.min(100 - newCrop.width, cropStart.x + deltaX));
+        newCrop.y = Math.max(0, Math.min(100 - newCrop.height, cropStart.y + deltaY));
+        break;
+      case 'nw':
+        newCrop.x = Math.max(0, Math.min(cropStart.x + cropStart.width - 10, cropStart.x + deltaX));
+        newCrop.y = Math.max(0, Math.min(cropStart.y + cropStart.height - 10, cropStart.y + deltaY));
+        newCrop.width = cropStart.width - (newCrop.x - cropStart.x);
+        newCrop.height = cropStart.height - (newCrop.y - cropStart.y);
+        break;
+      case 'ne':
+        newCrop.y = Math.max(0, Math.min(cropStart.y + cropStart.height - 10, cropStart.y + deltaY));
+        newCrop.width = Math.max(10, Math.min(100 - cropStart.x, cropStart.width + deltaX));
+        newCrop.height = cropStart.height - (newCrop.y - cropStart.y);
+        break;
+      case 'sw':
+        newCrop.x = Math.max(0, Math.min(cropStart.x + cropStart.width - 10, cropStart.x + deltaX));
+        newCrop.width = cropStart.width - (newCrop.x - cropStart.x);
+        newCrop.height = Math.max(10, Math.min(100 - cropStart.y, cropStart.height + deltaY));
+        break;
+      case 'se':
+        newCrop.width = Math.max(10, Math.min(100 - cropStart.x, cropStart.width + deltaX));
+        newCrop.height = Math.max(10, Math.min(100 - cropStart.y, cropStart.height + deltaY));
+        break;
+      case 'n':
+        newCrop.y = Math.max(0, Math.min(cropStart.y + cropStart.height - 10, cropStart.y + deltaY));
+        newCrop.height = cropStart.height - (newCrop.y - cropStart.y);
+        break;
+      case 's':
+        newCrop.height = Math.max(10, Math.min(100 - cropStart.y, cropStart.height + deltaY));
+        break;
+      case 'w':
+        newCrop.x = Math.max(0, Math.min(cropStart.x + cropStart.width - 10, cropStart.x + deltaX));
+        newCrop.width = cropStart.width - (newCrop.x - cropStart.x);
+        break;
+      case 'e':
+        newCrop.width = Math.max(10, Math.min(100 - cropStart.x, cropStart.width + deltaX));
+        break;
+    }
+    
+    setCropSettings(newCrop);
+  }, [isDraggingCrop, dragStart, cropStart]);
+
+  const handleCropMouseUp = useCallback(() => {
+    setIsDraggingCrop(null);
+  }, []);
+
+  useEffect(() => {
+    if (isDraggingCrop) {
+      document.addEventListener('mousemove', handleCropMouseMove);
+      document.addEventListener('mouseup', handleCropMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleCropMouseMove);
+      document.removeEventListener('mouseup', handleCropMouseUp);
+    };
+  }, [isDraggingCrop, handleCropMouseMove, handleCropMouseUp]);
+
+  const applyCrop = () => {
+    setIsCropMode(false);
+  };
+
+  const cancelCrop = () => {
+    setCropSettings({ x: 0, y: 0, width: 100, height: 100 });
+    setIsCropMode(false);
+  };
+
+  const resetCrop = () => {
+    setCropSettings({ x: 0, y: 0, width: 100, height: 100 });
+  };
+
   return (
     <div className={cn("space-y-4", className)}>
       {/* Video Display */}
@@ -279,9 +386,87 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           style={{
             transform: `scale(${(100 - videoPadding) / 100})`,
             borderRadius: `${videoCornerRadius}px`,
+            objectFit: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 ? 'contain' : 'none',
+            objectPosition: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 ? 'center' : 
+              `${-cropSettings.x * (100 / cropSettings.width)}% ${-cropSettings.y * (100 / cropSettings.height)}%`,
+            width: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 ? 'auto' : 
+              `${100 / cropSettings.width * 100}%`,
+            height: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 ? 'auto' : 
+              `${100 / cropSettings.height * 100}%`,
           }}
           onClick={togglePlay}
         />
+        
+        {/* Crop Overlay */}
+        {isCropMode && (
+          <div 
+            ref={cropOverlayRef}
+            className="absolute inset-0 cursor-crosshair"
+          >
+            {/* Dark overlay outside crop area */}
+            <div className="absolute inset-0 bg-black/50" />
+            
+            {/* Crop area */}
+            <div 
+              className="absolute border-2 border-white bg-transparent"
+              style={{
+                left: `${cropSettings.x}%`,
+                top: `${cropSettings.y}%`,
+                width: `${cropSettings.width}%`,
+                height: `${cropSettings.height}%`,
+              }}
+              onMouseDown={(e) => handleCropMouseDown(e, 'move')}
+            >
+              {/* Corner handles */}
+              <div 
+                className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-gray-400 cursor-nw-resize"
+                onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
+              />
+              <div 
+                className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-gray-400 cursor-ne-resize"
+                onMouseDown={(e) => handleCropMouseDown(e, 'ne')}
+              />
+              <div 
+                className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-gray-400 cursor-sw-resize"
+                onMouseDown={(e) => handleCropMouseDown(e, 'sw')}
+              />
+              <div 
+                className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-gray-400 cursor-se-resize"
+                onMouseDown={(e) => handleCropMouseDown(e, 'se')}
+              />
+              
+              {/* Edge handles */}
+              <div 
+                className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border border-gray-400 cursor-n-resize"
+                onMouseDown={(e) => handleCropMouseDown(e, 'n')}
+              />
+              <div 
+                className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border border-gray-400 cursor-s-resize"
+                onMouseDown={(e) => handleCropMouseDown(e, 's')}
+              />
+              <div 
+                className="absolute -left-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border border-gray-400 cursor-w-resize"
+                onMouseDown={(e) => handleCropMouseDown(e, 'w')}
+              />
+              <div 
+                className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border border-gray-400 cursor-e-resize"
+                onMouseDown={(e) => handleCropMouseDown(e, 'e')}
+              />
+            </div>
+            
+            {/* Crop control buttons */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+              <Button onClick={applyCrop} size="sm" className="bg-green-600 hover:bg-green-700">
+                <Check className="h-4 w-4 mr-2" />
+                Apply Crop
+              </Button>
+              <Button onClick={cancelCrop} size="sm" variant="outline">
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Timeline */}
@@ -351,6 +536,33 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             step={1}
             className="w-full"
           />
+        </div>
+
+        {/* Crop Video Button */}
+        <div className="flex items-center justify-between">
+          <label className="text-sm text-muted-foreground flex items-center gap-2">
+            <Crop className="h-3 w-3" />
+            Video Crop
+          </label>
+          <div className="flex gap-2">
+            <Button
+              onClick={toggleCropMode}
+              variant={isCropMode ? "default" : "outline"}
+              size="sm"
+              disabled={!duration}
+            >
+              {isCropMode ? 'Exit Crop' : 'Crop Video'}
+            </Button>
+            {!isCropMode && (cropSettings.x !== 0 || cropSettings.y !== 0 || cropSettings.width !== 100 || cropSettings.height !== 100) && (
+              <Button
+                onClick={resetCrop}
+                variant="ghost"
+                size="sm"
+              >
+                Reset
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Background Color Selector */}
@@ -436,7 +648,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
               const percentage = x / rect.width;
               const time = percentage * duration;
               
-              // Check if clicking within trim range for scrubbing
               if (time >= trimStart && time <= trimEnd) {
                 handleTrimMouseDown(e, 'scrub');
               }
