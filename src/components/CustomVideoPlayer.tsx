@@ -629,23 +629,30 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   overflow: 'hidden',
                 }}
               >
-                <video
-                  ref={videoRef}
-                  src={src}
-                  crossOrigin="anonymous"
-                  className="max-w-full max-h-full"
+                <div
+                  className="relative overflow-hidden"
                   style={{
-                    clipPath: getClipPath(),
-                    transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
-                    transformOrigin: `${(currentZoomTarget.x / 7) * 100}% ${(currentZoomTarget.y / 7) * 100}%`,
-                    transition: `transform ${
-                      zoomEffects.find(zoom => 
-                        currentTime >= zoom.startTime && currentTime <= zoom.endTime
-                      )?.zoomSpeed || lastZoomSpeed
-                    }s cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
+                    borderRadius: `${videoCornerRadius}px`,
                   }}
-                  onClick={togglePlay}
-                />
+                >
+                  <video
+                    ref={videoRef}
+                    src={src}
+                    crossOrigin="anonymous"
+                    className="max-w-full max-h-full"
+                    style={{
+                      clipPath: getClipPath(),
+                      transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
+                      transformOrigin: `${Math.max(10, Math.min(90, (currentZoomTarget.x / 7) * 100))}% ${Math.max(10, Math.min(90, (currentZoomTarget.y / 7) * 100))}%`,
+                      transition: `transform ${
+                        zoomEffects.find(zoom => 
+                          currentTime >= zoom.startTime && currentTime <= zoom.endTime
+                        )?.zoomSpeed || lastZoomSpeed
+                      }s cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
+                    }}
+                    onClick={togglePlay}
+                  />
+                </div>
               </div>
               
               {isCropMode && (
