@@ -2,13 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Play, Square, Download, Settings, Upload } from 'lucide-react';
-import { VideoTimeline } from './VideoTimeline';
-import { VideoControls } from './VideoControls';
-import { SimpleVideoRenderer, SimpleVideoRendererRef } from './SimpleVideoRenderer';
-import { useVideoProcessor } from '@/hooks/useVideoProcessor';
-import { toast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { Play, Square, Download, Settings } from 'lucide-react';
 
 type QualityPreset = 'standard' | 'high' | 'ultra';
 
@@ -53,26 +47,10 @@ const SimpleVideoRecorder = () => {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string>('');
   const [quality, setQuality] = useState<QualityPreset>('high');
   const [error, setError] = useState<string>('');
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  
-  // Video editing states
-  const [videoDuration, setVideoDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [trimStart, setTrimStart] = useState(0);
-  const [trimEnd, setTrimEnd] = useState(0);
-  const [splitPoints, setSplitPoints] = useState<number[]>([]);
-  const [isExporting, setIsExporting] = useState(false);
-  const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
-  const [videoId, setVideoId] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const videoRendererRef = useRef<SimpleVideoRendererRef>(null);
-  
-  const { processVideo } = useVideoProcessor();
 
   const getSupportedMimeType = (preferredType: string): string => {
     const fallbacks = [
@@ -135,13 +113,11 @@ const SimpleVideoRecorder = () => {
         }
       };
 
-      mediaRecorder.onstop = async () => {
+      mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        setRecordedVideoBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setRecordedVideoUrl(url);
         setIsRecording(false);
-        
-        // Upload to Supabase immediately after recording
-        await uploadVideoToSupabase(blob);
       };
 
       // Start recording with 1-second intervals for smoother data handling
@@ -165,87 +141,6 @@ const SimpleVideoRecorder = () => {
     }
   };
 
-  const uploadVideoToSupabase = async (blob: Blob) => {
-    try {
-      setIsUploading(true);
-      setUploadProgress(0);
-      
-      const config = QUALITY_PRESETS[quality];
-      const extension = config.mimeType.includes('mp4') ? 'mp4' : 'webm';
-      const filename = `recording-${Date.now()}.${extension}`;
-      
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('recorded-videos')
-        .upload(filename, blob);
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('recorded-videos')
-        .getPublicUrl(filename);
-
-      const publicUrl = urlData.publicUrl;
-      
-      // Get video duration
-      const duration = await new Promise<number>((resolve) => {
-        const video = document.createElement('video');
-        video.onloadedmetadata = () => {
-          resolve(video.duration);
-          URL.revokeObjectURL(video.src);
-        };
-        video.src = URL.createObjectURL(blob);
-      });
-
-      // Save metadata to database
-      const { data: dbData, error: dbError } = await supabase
-        .from('recordedvids')
-        .insert([
-          {
-            filename: filename,
-            file_url: publicUrl,
-            file_size: blob.size,
-            duration: duration,
-            quality_preset: quality
-          }
-        ])
-        .select()
-        .single();
-
-      if (dbError) {
-        throw dbError;
-      }
-
-      // Set the stable Supabase URL
-      setRecordedVideoUrl(publicUrl);
-      setVideoId(dbData.id);
-      setUploadProgress(100);
-      
-      toast({
-        title: "Upload successful",
-        description: "Your video has been uploaded and is ready for editing"
-      });
-      
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast({
-        title: "Upload failed",
-        description: "Failed to upload video. Using local playback instead.",
-        variant: "destructive"
-      });
-      
-      // Fallback to local blob URL
-      const url = URL.createObjectURL(blob);
-      setRecordedVideoUrl(url);
-      
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   const downloadVideo = () => {
     if (recordedVideoUrl) {
       const config = QUALITY_PRESETS[quality];
@@ -260,124 +155,6 @@ const SimpleVideoRecorder = () => {
       document.body.removeChild(a);
     }
   };
-
-  // Video editing functions with custom renderer
-  const handleVideoLoadedData = () => {
-    console.log('SimpleVideoRecorder: Video loaded data event triggered');
-    const renderer = videoRendererRef.current;
-    if (renderer) {
-      const duration = renderer.getDuration();
-      console.log('SimpleVideoRecorder: Video duration from renderer:', duration);
-      
-      // Accept any positive, finite duration
-      if (duration > 0 && isFinite(duration)) {
-        setVideoDuration(duration);
-        setTrimStart(0);
-        setTrimEnd(duration);
-        setSplitPoints([]);
-        console.log('SimpleVideoRecorder: Video duration set successfully:', duration);
-      } else {
-        console.warn('SimpleVideoRecorder: Invalid video duration, but showing controls anyway:', duration);
-        // Show controls even without valid duration - user can still interact with video
-        setVideoDuration(0); // Keep as 0 to show loading state
-      }
-    } else {
-      console.warn('SimpleVideoRecorder: Video renderer ref not available');
-    }
-  };
-
-  const handleTimeUpdate = (time: number) => {
-    setCurrentTime(time);
-  };
-
-  const handlePlayPause = () => {
-    const renderer = videoRendererRef.current;
-    if (!renderer) return;
-
-    if (isPlaying) {
-      renderer.pause();
-      setIsPlaying(false);
-    } else {
-      renderer.play();
-      setIsPlaying(true);
-    }
-  };
-
-  const handleSeek = (time: number) => {
-    const renderer = videoRendererRef.current;
-    if (renderer) {
-      renderer.seek(time);
-    }
-  };
-
-  const handleGoToStart = () => {
-    const renderer = videoRendererRef.current;
-    if (renderer) {
-      renderer.seek(trimStart);
-    }
-  };
-
-  const handleTrimChange = (start: number, end: number) => {
-    setTrimStart(start);
-    setTrimEnd(end);
-    
-    // If current time is outside new trim bounds, seek to start
-    if (currentTime < start || currentTime > end) {
-      const renderer = videoRendererRef.current;
-      if (renderer) {
-        renderer.seek(start);
-      }
-    }
-  };
-
-  const handleSplit = (time: number) => {
-    if (!splitPoints.includes(time)) {
-      setSplitPoints([...splitPoints, time].sort((a, b) => a - b));
-      toast({
-        title: "Split added",
-        description: `Video will be split at ${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`
-      });
-    }
-  };
-
-  const handleExport = async () => {
-    if (!recordedVideoBlob) return;
-    
-    setIsExporting(true);
-    try {
-      const processedBlob = await processVideo(recordedVideoBlob, {
-        trimStart: trimStart,
-        trimEnd: trimEnd
-      });
-      
-      const url = URL.createObjectURL(processedBlob);
-      const config = QUALITY_PRESETS[quality];
-      const extension = config.mimeType.includes('mp4') ? 'mp4' : 'webm';
-      const filename = `edited-recording-${quality}-${new Date().toISOString().slice(0, 19)}.${extension}`;
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      
-      toast({
-        title: "Export complete",
-        description: "Your edited video has been downloaded"
-      });
-    } catch (error) {
-      toast({
-        title: "Export failed",
-        description: "There was an error processing your video",
-        variant: "destructive"
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const hasEdits = trimStart > 0 || trimEnd < videoDuration || splitPoints.length > 0;
 
   const currentConfig = QUALITY_PRESETS[quality];
   const estimatedSizeMB = Math.round((currentConfig.videoBitsPerSecond + currentConfig.audioBitsPerSecond) / 8 / 1024 / 1024 * 60); // Per minute
@@ -450,84 +227,15 @@ const SimpleVideoRecorder = () => {
             )}
           </div>
 
-          {/* Recorded Video Playback with Custom Renderer */}
+          {/* Recorded Video Playback */}
           {recordedVideoUrl && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               <h3 className="text-sm font-medium">Recorded Video</h3>
-              
-              {/* Simple Video Renderer */}
-              <SimpleVideoRenderer
-                ref={videoRendererRef}
-                videoSrc={recordedVideoUrl}
-                trimStart={trimStart}
-                trimEnd={trimEnd}
-                currentTime={currentTime}
-                isPlaying={isPlaying}
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedData={handleVideoLoadedData}
-                className="w-full max-h-96"
+              <video
+                src={recordedVideoUrl}
+                controls
+                className="w-full max-h-96 bg-muted rounded-lg"
               />
-              
-              {/* Upload Status */}
-              {isUploading && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Upload className="w-4 h-4 animate-spin" />
-                    Uploading video... {uploadProgress}%
-                  </div>
-                  <div className="w-full bg-secondary rounded-full h-2">
-                    <div 
-                      className="bg-primary h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              
-              {/* Video Editing Controls - Always show when video exists */}
-              <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-medium">
-                    Video Editor {videoDuration > 0 ? `(${Math.round(videoDuration)}s)` : '(Loading...)'}
-                  </h4>
-                  <VideoControls
-                    isPlaying={isPlaying}
-                    onPlayPause={handlePlayPause}
-                    onGoToStart={handleGoToStart}
-                    onExport={handleExport}
-                    isExporting={isExporting}
-                    hasEdits={hasEdits}
-                  />
-                </div>
-                
-                {/* Show timeline if duration is available, otherwise show loading state */}
-                {videoDuration > 0 ? (
-                  <VideoTimeline
-                    videoRef={null}
-                    duration={videoDuration}
-                    currentTime={currentTime}
-                    onSeek={handleSeek}
-                    onTrimChange={handleTrimChange}
-                    onSplit={handleSplit}
-                    trimStart={trimStart}
-                    trimEnd={trimEnd}
-                    splitPoints={splitPoints}
-                  />
-                ) : (
-                  <div className="text-sm text-muted-foreground p-4 text-center">
-                    Loading video metadata...
-                  </div>
-                )}
-                
-                {/* Split Points Display */}
-                {splitPoints.length > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    Split points: {splitPoints.map(time => 
-                      `${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`
-                    ).join(', ')}
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
