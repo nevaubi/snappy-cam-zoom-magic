@@ -11,6 +11,10 @@ export interface VideoProcessingOptions {
   trimStart?: number;
   trimEnd?: number;
   quality?: 'high' | 'medium' | 'low';
+  // New options for UI edits
+  videoPadding?: number;
+  backgroundColor?: string;
+  videoDuration?: number;
 }
 
 // Singleton FFmpeg instance
@@ -62,41 +66,87 @@ export const useVideoProcessor = () => {
     // Write input video to FFmpeg
     await ffmpeg.writeFile('input.webm', await fetchFile(videoBlob));
 
-    // Build FFmpeg command
-    const args = ['-i', 'input.webm'];
+    // Build FFmpeg command with background composition
+    const args: string[] = [];
+    let inputCount = 1;
     
-    // Video filters
-    const filters: string[] = [];
-    
-    // Crop filter
-    if (options.cropX !== undefined && options.cropY !== undefined && 
-        options.cropWidth !== undefined && options.cropHeight !== undefined) {
-      const cropW = Math.round(1920 * (options.cropWidth / 100));
-      const cropH = Math.round(1080 * (options.cropHeight / 100));
-      const cropX = Math.round(1920 * (options.cropX / 100));
-      const cropY = Math.round(1080 * (options.cropY / 100));
-      filters.push(`crop=${cropW}:${cropH}:${cropX}:${cropY}`);
-    }
-    
-    // Zoom filter (scale)
-    if (options.zoom && options.zoom !== 1) {
-      const scale = Math.round(1920 * options.zoom);
-      filters.push(`scale=${scale}:${Math.round(scale * 9/16)}`);
-    }
-    
-    if (filters.length > 0) {
-      args.push('-vf', filters.join(','));
-    }
-    
-    // Trim video
-    if (options.trimStart !== undefined && options.trimStart > 0) {
-      args.push('-ss', `${options.trimStart}s`);
-    }
-    
-    if (options.trimEnd !== undefined && options.trimEnd < 100) {
-      // Calculate duration - this would need the original video duration
-      // For now, we'll just cut at the end time
-      args.push('-t', `${options.trimEnd}s`);
+    // Handle background color and video scaling
+    if (options.backgroundColor && options.videoPadding !== undefined) {
+      // Create colored background
+      const backgroundColor = options.backgroundColor.replace('#', '');
+      const scale = (100 - options.videoPadding) / 100;
+      
+      // Create a colored background and scale/overlay the video
+      args.push('-f', 'lavfi', '-i', `color=c=${backgroundColor}:size=1920x1080:d=${options.videoDuration || 30}`);
+      args.push('-i', 'input.webm');
+      inputCount = 2;
+      
+      // Trim video first if needed
+      let videoFilter = '[1:v]';
+      if (options.trimStart !== undefined && options.trimStart > 0) {
+        const trimDuration = options.trimEnd ? options.trimEnd - options.trimStart : undefined;
+        if (trimDuration) {
+          videoFilter += `trim=start=${options.trimStart}:duration=${trimDuration},setpts=PTS-STARTPTS,`;
+        }
+      }
+      
+      // Scale the video
+      videoFilter += `scale=iw*${scale}:ih*${scale}[scaled];`;
+      
+      // Overlay scaled video on background (centered)
+      const overlayFilter = `[0:v][scaled]overlay=(W-w)/2:(H-h)/2[v]`;
+      
+      args.push('-filter_complex', `${videoFilter}${overlayFilter}`);
+      args.push('-map', '[v]');
+      
+      // Map audio with trimming if needed
+      if (options.trimStart !== undefined && options.trimStart > 0) {
+        const trimDuration = options.trimEnd ? options.trimEnd - options.trimStart : undefined;
+        if (trimDuration) {
+          args.push('-filter_complex', `[1:a]atrim=start=${options.trimStart}:duration=${trimDuration},asetpts=PTS-STARTPTS[a]`);
+          args.push('-map', '[a]');
+        } else {
+          args.push('-map', '1:a');
+        }
+      } else {
+        args.push('-map', '1:a');
+      }
+    } else {
+      // Fallback to simple processing
+      args.push('-i', 'input.webm');
+      
+      // Video filters for simple case
+      const filters: string[] = [];
+      
+      // Crop filter
+      if (options.cropX !== undefined && options.cropY !== undefined && 
+          options.cropWidth !== undefined && options.cropHeight !== undefined) {
+        const cropW = Math.round(1920 * (options.cropWidth / 100));
+        const cropH = Math.round(1080 * (options.cropHeight / 100));
+        const cropX = Math.round(1920 * (options.cropX / 100));
+        const cropY = Math.round(1080 * (options.cropY / 100));
+        filters.push(`crop=${cropW}:${cropH}:${cropX}:${cropY}`);
+      }
+      
+      // Zoom filter (scale)
+      if (options.zoom && options.zoom !== 1) {
+        const scale = Math.round(1920 * options.zoom);
+        filters.push(`scale=${scale}:${Math.round(scale * 9/16)}`);
+      }
+      
+      if (filters.length > 0) {
+        args.push('-vf', filters.join(','));
+      }
+      
+      // Trim video
+      if (options.trimStart !== undefined && options.trimStart > 0) {
+        args.push('-ss', `${options.trimStart}s`);
+      }
+      
+      if (options.trimEnd !== undefined && options.videoDuration) {
+        const trimDuration = options.trimEnd - (options.trimStart || 0);
+        args.push('-t', `${trimDuration}s`);
+      }
     }
     
     // Quality settings

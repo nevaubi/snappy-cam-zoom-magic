@@ -1,19 +1,22 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, RotateCcw, Palette, Maximize } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useVideoProcessor } from '@/hooks/useVideoProcessor';
 
 interface CustomVideoPlayerProps {
   src: string;
   className?: string;
   onDurationLoad?: (duration: number) => void;
+  originalVideoBlob?: Blob;
 }
 
 export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ 
   src, 
   className, 
-  onDurationLoad 
+  onDurationLoad,
+  originalVideoBlob
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trimmerRef = useRef<HTMLDivElement>(null);
@@ -27,6 +30,11 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Video display styling states
   const [videoPadding, setVideoPadding] = useState(0);
   const [backgroundColor, setBackgroundColor] = useState('#000000');
+  
+  // Export functionality
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const { processVideo } = useVideoProcessor();
   
   // Background color presets
   const colorPresets = [
@@ -262,6 +270,53 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const getTrimmedDuration = () => trimEnd - trimStart;
 
+  // Export video with all UI edits applied
+  const exportVideo = async () => {
+    if (!originalVideoBlob) {
+      console.error('No original video blob available for export');
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      setExportProgress(0);
+
+      const options = {
+        trimStart: trimStart,
+        trimEnd: trimEnd,
+        videoPadding: videoPadding,
+        backgroundColor: backgroundColor,
+        videoDuration: duration,
+        quality: 'high' as const
+      };
+
+      console.log('Exporting video with options:', options);
+
+      const processedBlob = await processVideo(
+        originalVideoBlob,
+        options,
+        (progress) => setExportProgress(progress)
+      );
+
+      // Download the processed video
+      const url = URL.createObjectURL(processedBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `edited-video-${new Date().toISOString().slice(0, 19)}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      console.log('Video export completed successfully');
+    } catch (error) {
+      console.error('Error exporting video:', error);
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
+
   return (
     <div className={cn("space-y-4", className)}>
       {/* Video Display */}
@@ -394,6 +449,19 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
         </Button>
+
+        {/* Export Video Button */}
+        {originalVideoBlob && (
+          <Button
+            onClick={exportVideo}
+            disabled={isExporting}
+            variant="default"
+            size="sm"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {isExporting ? `Exporting... ${Math.round(exportProgress)}%` : 'Export Video'}
+          </Button>
+        )}
       </div>
 
       {/* Video Trimming Component */}
