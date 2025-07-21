@@ -506,7 +506,32 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     );
 
     if (activeZoom) {
-      setCurrentZoom(activeZoom.zoomAmount);
+      // Calculate smooth zoom progression based on position within the effect
+      const effectDuration = activeZoom.endTime - activeZoom.startTime;
+      const progressInEffect = (currentTime - activeZoom.startTime) / effectDuration;
+      
+      // Progressive zoom phases: 20% zoom-in, 60% hold, 20% zoom-out
+      const zoomInPhase = 0.2;
+      const zoomOutPhase = 0.8;
+      
+      let smoothZoom = 1;
+      
+      if (progressInEffect <= zoomInPhase) {
+        // Smooth zoom-in phase with ease-in-out
+        const zoomProgress = progressInEffect / zoomInPhase;
+        const easedProgress = zoomProgress * zoomProgress * (3 - 2 * zoomProgress); // Smoothstep
+        smoothZoom = 1 + (activeZoom.zoomAmount - 1) * easedProgress;
+      } else if (progressInEffect >= zoomOutPhase) {
+        // Smooth zoom-out phase with ease-in-out
+        const zoomOutProgress = (progressInEffect - zoomOutPhase) / (1 - zoomOutPhase);
+        const easedProgress = 1 - (zoomOutProgress * zoomOutProgress * (3 - 2 * zoomOutProgress)); // Reverse smoothstep
+        smoothZoom = 1 + (activeZoom.zoomAmount - 1) * easedProgress;
+      } else {
+        // Hold at full zoom
+        smoothZoom = activeZoom.zoomAmount;
+      }
+      
+      setCurrentZoom(smoothZoom);
       setCurrentZoomTarget({ 
         x: activeZoom.targetX + 0.5, 
         y: activeZoom.targetY + 0.5 
@@ -580,7 +605,9 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                     clipPath: getClipPath(),
                     transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
                     transformOrigin: `${(currentZoomTarget.x / 7) * 100}% ${(currentZoomTarget.y / 7) * 100}%`,
-                    transition: 'transform 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                    transition: `transform ${zoomEffects.find(zoom => 
+                      currentTime >= zoom.startTime && currentTime <= zoom.endTime
+                    )?.zoomSpeed || 0.15}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
                   }}
                   onClick={togglePlay}
                 />
