@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, RotateCcw } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CustomVideoPlayerProps {
@@ -23,6 +23,21 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [isDragging, setIsDragging] = useState<'start' | 'end' | 'scrub' | null>(null);
+  
+  // Video display styling states
+  const [videoPadding, setVideoPadding] = useState(0);
+  const [backgroundColor, setBackgroundColor] = useState('#000000');
+  
+  // Background color presets
+  const colorPresets = [
+    { name: 'Black', value: '#000000' },
+    { name: 'White', value: '#ffffff' },
+    { name: 'Gray', value: '#6b7280' },
+    { name: 'Blue', value: '#3b82f6' },
+    { name: 'Green', value: '#10b981' },
+    { name: 'Red', value: '#ef4444' },
+    { name: 'Purple', value: '#8b5cf6' },
+  ];
   
   // Use refs to store current values for stable callbacks
   const trimStartRef = useRef(0);
@@ -250,11 +265,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   return (
     <div className={cn("space-y-4", className)}>
       {/* Video Display */}
-      <div className="relative bg-black rounded-lg overflow-hidden">
+      <div 
+        className="relative rounded-lg overflow-hidden transition-all duration-300"
+        style={{
+          backgroundColor: backgroundColor,
+          padding: `${videoPadding}px`,
+        }}
+      >
         <video
           ref={videoRef}
           src={src}
-          className="w-full h-auto max-h-96"
+          className="w-full h-auto max-h-96 rounded-lg"
           onClick={togglePlay}
         />
       </div>
@@ -283,6 +304,55 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         />
       </div>
       
+      {/* Display Settings */}
+      <div className="space-y-4 border-t border-border pt-4">
+        <h3 className="text-sm font-medium flex items-center gap-2">
+          <Palette className="h-4 w-4" />
+          Display Settings
+        </h3>
+        
+        {/* Video Padding Slider */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-muted-foreground flex items-center gap-2">
+              <Maximize className="h-3 w-3" />
+              Video Padding
+            </label>
+            <span className="text-sm font-mono">{videoPadding}px</span>
+          </div>
+          <Slider
+            value={[videoPadding]}
+            onValueChange={(value) => setVideoPadding(value[0])}
+            max={100}
+            min={0}
+            step={1}
+            className="w-full"
+          />
+        </div>
+
+        {/* Background Color Selector */}
+        <div className="space-y-2">
+          <label className="text-sm text-muted-foreground">Background Color</label>
+          <div className="flex flex-wrap gap-2">
+            {colorPresets.map((color) => (
+              <button
+                key={color.value}
+                onClick={() => setBackgroundColor(color.value)}
+                className={cn(
+                  "w-8 h-8 rounded-full border-2 transition-all duration-200 hover:scale-110",
+                  backgroundColor === color.value 
+                    ? "border-primary shadow-lg scale-110" 
+                    : "border-border hover:border-muted-foreground"
+                )}
+                style={{ backgroundColor: color.value }}
+                title={color.name}
+                aria-label={`Set background to ${color.name}`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* External Controls */}
       <div className="flex items-center gap-4">
         <Button
