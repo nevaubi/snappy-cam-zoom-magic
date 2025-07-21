@@ -506,7 +506,32 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     );
 
     if (activeZoom) {
-      setCurrentZoom(activeZoom.zoomAmount);
+      // Calculate smooth zoom progression based on position within the effect
+      const effectDuration = activeZoom.endTime - activeZoom.startTime;
+      const progressInEffect = (currentTime - activeZoom.startTime) / effectDuration;
+      
+      // Use zoomSpeed to determine animation phases
+      const zoomInDuration = Math.min(0.3, activeZoom.zoomSpeed / 3); // 30% of zoomSpeed for zoom-in
+      const zoomOutDuration = Math.min(0.3, activeZoom.zoomSpeed / 3); // 30% of zoomSpeed for zoom-out
+      
+      let smoothZoom = 1;
+      
+      if (progressInEffect <= zoomInDuration) {
+        // Smooth zoom-in phase with ease-out
+        const zoomProgress = progressInEffect / zoomInDuration;
+        const easedProgress = 1 - Math.pow(1 - zoomProgress, 3); // Ease-out cubic
+        smoothZoom = 1 + (activeZoom.zoomAmount - 1) * easedProgress;
+      } else if (progressInEffect >= (1 - zoomOutDuration)) {
+        // Smooth zoom-out phase with ease-in
+        const zoomOutProgress = (progressInEffect - (1 - zoomOutDuration)) / zoomOutDuration;
+        const easedProgress = 1 - Math.pow(1 - zoomOutProgress, 3); // Ease-out cubic for natural feel
+        smoothZoom = activeZoom.zoomAmount - (activeZoom.zoomAmount - 1) * easedProgress;
+      } else {
+        // Hold at full zoom
+        smoothZoom = activeZoom.zoomAmount;
+      }
+      
+      setCurrentZoom(smoothZoom);
       setCurrentZoomTarget({ 
         x: activeZoom.targetX + 0.5, 
         y: activeZoom.targetY + 0.5 
@@ -575,11 +600,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   ref={videoRef}
                   src={src}
                   crossOrigin="anonymous"
-                  className="max-w-full max-h-full transition-all duration-300"
+                  className="max-w-full max-h-full"
                   style={{
                     clipPath: getClipPath(),
                     transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
                     transformOrigin: `${(currentZoomTarget.x / 7) * 100}% ${(currentZoomTarget.y / 7) * 100}%`,
+                    transition: 'transform 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
                   }}
                   onClick={togglePlay}
                 />
