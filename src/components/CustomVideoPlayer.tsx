@@ -37,6 +37,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     width: 100, // percentage of original width
     height: 100 // percentage of original height
   });
+  const [appliedCropSettings, setAppliedCropSettings] = useState({
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100
+  });
   const [cropDragging, setCropDragging] = useState<'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 'e' | 's' | 'w' | null>(null);
   const cropOverlayRef = useRef<HTMLDivElement>(null);
   
@@ -77,7 +83,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     const updateDuration = () => {
       const videoDuration = video.duration;
       
-      // Validate duration before using it
       if (isNaN(videoDuration) || !isFinite(videoDuration) || videoDuration <= 0) {
         console.warn('Invalid video duration detected:', videoDuration);
         return;
@@ -86,7 +91,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       console.log('Valid duration detected:', videoDuration, 'Has initialized trim:', hasInitializedTrim.current);
       setDuration(videoDuration);
       
-      // Only set initial trim values if not already initialized
       if (!hasInitializedTrim.current) {
         console.log('Setting initial trim values:', 0, 'to', videoDuration);
         setTrimStart(0);
@@ -104,23 +108,18 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       const currentTime = video.currentTime;
       setCurrentTime(currentTime);
       
-      // If video reaches trim end, pause or loop back (using refs for stable values)
       if (trimEndRef.current > 0 && currentTime >= trimEndRef.current) {
         video.pause();
         setIsPlaying(false);
-        // Optional: Loop back to start of trim
-        // video.currentTime = trimStartRef.current;
       }
     };
 
-    // Listen to multiple events for better duration detection
     video.addEventListener('loadedmetadata', updateDuration);
     video.addEventListener('canplay', updateDuration);
     video.addEventListener('durationchange', updateDuration);
     video.addEventListener('ended', handleEnded);
     video.addEventListener('timeupdate', handleTimeUpdate);
 
-    // Set preload to ensure metadata loads
     video.preload = 'metadata';
 
     return () => {
@@ -141,7 +140,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         await video.pause();
         setIsPlaying(false);
       } else {
-        // If current time is outside trim range, start from trim start
         if (video.currentTime < trimStart || video.currentTime >= trimEnd) {
           video.currentTime = trimStart;
           setCurrentTime(trimStart);
@@ -160,7 +158,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     if (!video) return;
 
     try {
-      // If current time is outside trim range, start from trim start
       if (video.currentTime < trimStart || video.currentTime >= trimEnd) {
         video.currentTime = trimStart;
         setCurrentTime(trimStart);
@@ -189,7 +186,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     const video = videoRef.current;
     if (!video || !duration || trimEnd <= trimStart) return;
 
-    // Calculate seek time within trim range
     const trimDuration = trimEnd - trimStart;
     const seekTime = trimStart + (value[0] / 100) * trimDuration;
     
@@ -205,7 +201,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     return `${minutes}:${wholeSeconds.toString().padStart(2, '0')}${tenths}`;
   };
 
-  // Trimming functions
   const handleTrimMouseDown = (e: React.MouseEvent, type: 'start' | 'end' | 'scrub') => {
     e.preventDefault();
     e.stopPropagation();
@@ -227,7 +222,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       const newTrimStart = Math.max(0, Math.min(time, trimEndRef.current - 0.5));
       console.log('Setting trimStart to:', newTrimStart);
       setTrimStart(newTrimStart);
-      // Show real-time preview while dragging
       if (video) {
         video.currentTime = newTrimStart;
         setCurrentTime(newTrimStart);
@@ -236,7 +230,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       const newTrimEnd = Math.min(durationRef.current, Math.max(time, trimStartRef.current + 0.5));
       console.log('Setting trimEnd to:', newTrimEnd);
       setTrimEnd(newTrimEnd);
-      // Show real-time preview while dragging
       if (video) {
         video.currentTime = newTrimEnd;
         setCurrentTime(newTrimEnd);
@@ -248,7 +241,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         setCurrentTime(clampedTime);
       }
     }
-  }, [isDragging]); // Only isDragging as dependency
+  }, [isDragging]);
 
   const handleTrimMouseUp = useCallback(() => {
     setIsDragging(null);
@@ -274,7 +267,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const getTrimmedDuration = () => trimEnd - trimStart;
 
-  // Cropping functions
   const handleCropMouseDown = (e: React.MouseEvent, type: typeof cropDragging) => {
     e.preventDefault();
     e.stopPropagation();
@@ -292,10 +284,9 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
     setCropSettings(prev => {
       const newCrop = { ...prev };
-      const minSize = 10; // Minimum 10% size
+      const minSize = 10;
 
       if (cropDragging === 'move') {
-        // Move entire crop area
         const deltaX = percentageX * 100 - (prev.x + prev.width / 2);
         const deltaY = percentageY * 100 - (prev.y + prev.height / 2);
         
@@ -335,7 +326,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         newCrop.width = Math.max(minSize, percentageX * 100 - prev.x);
       }
 
-      // Ensure crop stays within bounds
       newCrop.x = Math.max(0, newCrop.x);
       newCrop.y = Math.max(0, newCrop.y);
       newCrop.width = Math.min(100 - newCrop.x, Math.max(minSize, newCrop.width));
@@ -366,30 +356,47 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   };
 
   const applyCrop = () => {
+    // Save the crop settings and apply auto-centering
+    setAppliedCropSettings({ ...cropSettings });
     setIsCropMode(false);
   };
 
   const resetCrop = () => {
     setCropSettings({ x: 0, y: 0, width: 100, height: 100 });
+    setAppliedCropSettings({ x: 0, y: 0, width: 100, height: 100 });
   };
 
-  // Calculate clip-path for video cropping
   const getClipPath = () => {
-    if (cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0) {
+    const crop = isCropMode ? cropSettings : appliedCropSettings;
+    
+    if (crop.width === 100 && crop.height === 100 && crop.x === 0 && crop.y === 0) {
       return 'none';
     }
     
-    const top = cropSettings.y;
-    const right = 100 - (cropSettings.x + cropSettings.width);
-    const bottom = 100 - (cropSettings.y + cropSettings.height);
-    const left = cropSettings.x;
+    const top = crop.y;
+    const right = 100 - (crop.x + crop.width);
+    const bottom = 100 - (crop.y + crop.height);
+    const left = crop.x;
     
     return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
   };
 
+  const getCenteringTransform = () => {
+    if (isCropMode || (appliedCropSettings.width === 100 && appliedCropSettings.height === 100 && appliedCropSettings.x === 0 && appliedCropSettings.y === 0)) {
+      return '';
+    }
+
+    const cropCenterX = appliedCropSettings.x + (appliedCropSettings.width / 2);
+    const cropCenterY = appliedCropSettings.y + (appliedCropSettings.height / 2);
+    
+    const offsetX = (50 - cropCenterX) * 2;
+    const offsetY = (50 - cropCenterY) * 2;
+    
+    return `translate(${offsetX}%, ${offsetY}%)`;
+  };
+
   return (
     <div className={cn("space-y-4", className)}>
-      {/* Video Display */}
       <div 
         className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
         style={{
@@ -399,21 +406,27 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         <div 
           className="relative"
           style={{
-            transform: `scale(${(100 - videoPadding) / 100})`,
+            transform: `scale(${(100 - videoPadding) / 100}) ${getCenteringTransform()}`.trim(),
           }}
         >
-          <video
-            ref={videoRef}
-            src={src}
-            className="max-w-full max-h-full transition-all duration-300"
+          <div
+            className="relative transition-all duration-300"
             style={{
-              clipPath: getClipPath(),
               borderRadius: `${videoCornerRadius}px`,
+              overflow: 'hidden',
             }}
-            onClick={togglePlay}
-          />
+          >
+            <video
+              ref={videoRef}
+              src={src}
+              className="max-w-full max-h-full transition-all duration-300"
+              style={{
+                clipPath: getClipPath(),
+              }}
+              onClick={togglePlay}
+            />
+          </div>
           
-          {/* Crop Overlay */}
           {isCropMode && (
             <div 
               ref={cropOverlayRef}
@@ -422,10 +435,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                 borderRadius: `${videoCornerRadius}px`,
               }}
             >
-              {/* Dark overlay outside crop area */}
               <div className="absolute inset-0 bg-black/50" />
               
-              {/* Crop area */}
               <div 
                 className="absolute border-2 border-white bg-transparent"
                 style={{
@@ -436,7 +447,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                 }}
                 onMouseDown={(e) => handleCropMouseDown(e, 'move')}
               >
-                {/* Grid lines */}
                 <div className="absolute inset-0">
                   <div className="absolute left-1/3 top-0 w-px h-full bg-white/30" />
                   <div className="absolute left-2/3 top-0 w-px h-full bg-white/30" />
@@ -444,7 +454,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   <div className="absolute top-2/3 left-0 h-px w-full bg-white/30" />
                 </div>
                 
-                {/* Corner handles */}
                 <div 
                   className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-nw-resize"
                   onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
@@ -462,7 +471,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   onMouseDown={(e) => handleCropMouseDown(e, 'se')}
                 />
                 
-                {/* Edge handles */}
                 <div 
                   className="absolute -top-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-n-resize transform -translate-x-1/2"
                   onMouseDown={(e) => handleCropMouseDown(e, 'n')}
@@ -481,7 +489,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                 />
               </div>
               
-              {/* Crop info */}
               <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-mono">
                 {Math.round(cropSettings.width)}% × {Math.round(cropSettings.height)}%
               </div>
@@ -490,7 +497,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         </div>
       </div>
       
-      {/* Timeline */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{formatTime(currentTime - trimStart)}</span>
@@ -514,14 +520,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         />
       </div>
       
-      {/* Display Settings */}
       <div className="space-y-4 border-t border-border pt-4">
         <h3 className="text-sm font-medium flex items-center gap-2">
           <Palette className="h-4 w-4" />
           Display Settings
         </h3>
         
-        {/* Video Scale Slider */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm text-muted-foreground flex items-center gap-2">
@@ -540,7 +544,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           />
         </div>
 
-        {/* Corner Rounding Slider */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm text-muted-foreground flex items-center gap-2">
@@ -559,7 +562,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           />
         </div>
 
-        {/* Video Cropping */}
         <div className="space-y-2">
           <label className="text-sm text-muted-foreground flex items-center gap-2">
             <Crop className="h-3 w-3" />
@@ -597,7 +599,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           </div>
         </div>
 
-        {/* Background Color Selector */}
         <div className="space-y-2">
           <label className="text-sm text-muted-foreground">Background Color</label>
           <div className="flex flex-wrap gap-2">
@@ -620,7 +621,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         </div>
       </div>
 
-      {/* External Controls */}
       <div className="flex items-center gap-4">
         <Button
           onClick={handlePlay}
@@ -661,7 +661,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         </Button>
       </div>
 
-      {/* Video Trimming Component */}
       {duration > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -680,16 +679,13 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
               const percentage = x / rect.width;
               const time = percentage * duration;
               
-              // Check if clicking within trim range for scrubbing
               if (time >= trimStart && time <= trimEnd) {
                 handleTrimMouseDown(e, 'scrub');
               }
             }}
           >
-            {/* Full timeline background */}
             <div className="absolute inset-0 bg-muted-foreground/20 rounded-lg" />
             
-            {/* Trimmed section highlight */}
             <div 
               className="absolute top-0 bottom-0 bg-primary/30 border-t-2 border-b-2 border-primary"
               style={{
@@ -698,7 +694,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
               }}
             />
             
-            {/* Current time indicator */}
             <div 
               className="absolute top-0 bottom-0 w-0.5 bg-foreground z-10"
               style={{
@@ -706,7 +701,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
               }}
             />
             
-            {/* Start handle */}
             <div 
               className={cn(
                 "absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
@@ -720,7 +714,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
               <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
             </div>
             
-            {/* End handle */}
             <div 
               className={cn(
                 "absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
