@@ -2,10 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
+import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
+import { ZoomPresets } from './ZoomPresets';
+import { ZoomGridSelector } from './ZoomGridSelector';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -53,6 +56,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   });
   const [cropDragging, setCropDragging] = useState<'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 'e' | 's' | 'w' | null>(null);
   const cropOverlayRef = useRef<HTMLDivElement>(null);
+  
+  // Zoom states
+  const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
+  const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(1); // Current zoom level applied to video
+  const [currentZoomTarget, setCurrentZoomTarget] = useState({ x: 3.5, y: 3.5 }); // Center by default
   
   // Background color presets
   const colorPresets = [
@@ -439,6 +448,94 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     return `translate(${offsetX}%, ${offsetY}%)`;
   };
 
+  // Zoom functions
+  const addZoomEffect = () => {
+    if (zoomEffects.length >= 5) return;
+    
+    const randomStart = Math.random() * Math.max(0, duration - 3);
+    const randomEnd = Math.min(duration, randomStart + 3);
+    
+    const newZoom: ZoomEffect = {
+      id: `zoom-${Date.now()}`,
+      startTime: randomStart,
+      endTime: randomEnd,
+      zoomAmount: 1.5,
+      zoomSpeed: 1,
+      targetX: 3,
+      targetY: 3
+    };
+    
+    setZoomEffects(prev => [...prev, newZoom]);
+    setSelectedZoomId(newZoom.id);
+  };
+
+  const updateZoomEffect = (updatedZoom: ZoomEffect) => {
+    setZoomEffects(prev => prev.map(zoom => 
+      zoom.id === updatedZoom.id ? updatedZoom : zoom
+    ));
+  };
+
+  const deleteZoomEffect = (zoomId: string) => {
+    setZoomEffects(prev => prev.filter(zoom => zoom.id !== zoomId));
+    if (selectedZoomId === zoomId) {
+      setSelectedZoomId(null);
+    }
+  };
+
+  const updateSelectedZoom = <K extends keyof ZoomEffect>(
+    key: K, 
+    value: ZoomEffect[K]
+  ) => {
+    if (!selectedZoomId) return;
+    
+    setZoomEffects(prev => prev.map(zoom => 
+      zoom.id === selectedZoomId ? { ...zoom, [key]: value } : zoom
+    ));
+  };
+
+  // Apply zoom effects during video playback
+  useEffect(() => {
+    if (!videoRef.current || zoomEffects.length === 0) {
+      setCurrentZoom(1);
+      setCurrentZoomTarget({ x: 3.5, y: 3.5 });
+      return;
+    }
+
+    const activeZoom = zoomEffects.find(zoom => 
+      currentTime >= zoom.startTime && currentTime <= zoom.endTime
+    );
+
+    if (activeZoom) {
+      setCurrentZoom(activeZoom.zoomAmount);
+      setCurrentZoomTarget({ 
+        x: activeZoom.targetX + 0.5, 
+        y: activeZoom.targetY + 0.5 
+      });
+    } else {
+      setCurrentZoom(1);
+      setCurrentZoomTarget({ x: 3.5, y: 3.5 });
+    }
+  }, [currentTime, zoomEffects]);
+
+  // Zoom presets data
+  const zoomAmounts = [
+    { value: 1.2, label: '1.2x' },
+    { value: 1.5, label: '1.5x' },
+    { value: 2.0, label: '2x' },
+    { value: 2.5, label: '2.5x' },
+    { value: 3.0, label: '3x' }
+  ];
+
+  const zoomSpeeds = [
+    { value: 0.5, label: '0.5s' },
+    { value: 1, label: '1s' },
+    { value: 1.5, label: '1.5s' },
+    { value: 2, label: '2s' },
+    { value: 3, label: '3s' }
+  ];
+
+  const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
+
   return (
     <div className={cn("space-y-6", className)}>
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
@@ -480,6 +577,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   className="max-w-full max-h-full transition-all duration-300"
                   style={{
                     clipPath: getClipPath(),
+                    transform: currentZoom !== 1 
+                      ? `scale(${currentZoom}) translate(${(currentZoomTarget.x - 4) * -25}%, ${(currentZoomTarget.y - 4) * -25}%)`
+                      : 'none',
+                    transformOrigin: 'center',
                   }}
                   onClick={togglePlay}
                 />
@@ -755,12 +856,94 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
               </TabsContent>
               
               <TabsContent value="zoom" className="space-y-4 mt-0">
-                <div className="flex items-center justify-center py-8 text-muted-foreground">
-                  <div className="text-center space-y-2">
-                    <ZoomIn className="h-12 w-12 mx-auto opacity-50" />
-                    <p className="text-sm">Zoom controls coming soon</p>
+                {/* Add Zoom Button */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <ZoomIn className="h-4 w-4" />
+                      Zoom Effects
+                    </h3>
+                    <Button
+                      onClick={addZoomEffect}
+                      disabled={zoomEffects.length >= 5}
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Zoom ({zoomEffects.length}/5)
+                    </Button>
                   </div>
+
+                  {/* Zoom Effects List */}
+                  {zoomEffects.length > 0 && (
+                    <div className="space-y-2">
+                      {zoomEffects.map((zoom) => (
+                        <div
+                          key={zoom.id}
+                          className={cn(
+                            "p-2 border rounded-md cursor-pointer transition-colors",
+                            selectedZoomId === zoom.id
+                              ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"
+                              : "border-border hover:bg-muted/50"
+                          )}
+                          onClick={() => setSelectedZoomId(zoom.id)}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-medium">Zoom {zoom.zoomAmount}x</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteZoomEffect(zoom.id);
+                              }}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* Selected Zoom Settings */}
+                {selectedZoom && (
+                  <div className="space-y-4 border-t pt-4">
+                    <div className="space-y-3">
+                      <ZoomPresets
+                        title="Zoom Amount"
+                        options={zoomAmounts}
+                        selectedValue={selectedZoom.zoomAmount}
+                        onSelect={(value) => updateSelectedZoom('zoomAmount', value)}
+                      />
+
+                      <ZoomPresets
+                        title="Zoom Speed"
+                        options={zoomSpeeds}
+                        selectedValue={selectedZoom.zoomSpeed}
+                        onSelect={(value) => updateSelectedZoom('zoomSpeed', value)}
+                      />
+
+                      <ZoomGridSelector
+                        videoRef={videoRef}
+                        selectedX={selectedZoom.targetX}
+                        selectedY={selectedZoom.targetY}
+                        onGridSelect={(x, y) => {
+                          updateSelectedZoom('targetX', x);
+                          updateSelectedZoom('targetY', y);
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {zoomEffects.length === 0 && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <ZoomIn className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Click "Add Zoom" to create zoom effects</p>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </div>
@@ -899,6 +1082,25 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
               <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
             </div>
           </div>
+          
+          {/* Zoom Timelines */}
+          {zoomEffects.length > 0 && (
+            <div className="space-y-2 mt-4">
+              <div className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <ZoomIn className="h-3 w-3" />
+                Zoom Effects Timeline
+              </div>
+              {zoomEffects.map((zoom) => (
+                <ZoomTimeline
+                  key={zoom.id}
+                  zoomEffect={zoom}
+                  duration={duration}
+                  onUpdate={updateZoomEffect}
+                  onDelete={deleteZoomEffect}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
