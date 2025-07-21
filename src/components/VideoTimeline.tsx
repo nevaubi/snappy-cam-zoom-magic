@@ -60,7 +60,10 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
   };
 
   const formatTime = (time: number): string => {
-    return `${time.toFixed(1)}s`;
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    const milliseconds = Math.floor((time % 1) * 10);
+    return minutes > 0 ? `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds}` : `${seconds}.${milliseconds}s`;
   };
 
   // Handle mouse events for dragging
@@ -118,7 +121,7 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
       
       <div 
         ref={timelineRef}
-        className="relative h-12 bg-muted rounded-lg cursor-pointer select-none"
+        className="relative h-16 bg-muted rounded-lg cursor-pointer select-none transition-all duration-200 hover:bg-muted/80"
         onClick={handleTimelineClick}
         onContextMenu={handleRightClick}
       >
@@ -127,7 +130,7 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
         
         {/* Trimmed section */}
         <div 
-          className="absolute top-0 bottom-0 bg-primary/30 rounded-lg"
+          className="absolute top-0 bottom-0 bg-primary/40 rounded-lg border-2 border-primary/60 transition-colors duration-200"
           style={{
             left: `${startPercentage}%`,
             width: `${endPercentage - startPercentage}%`
@@ -145,33 +148,45 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
         
         {/* Start trim handle */}
         <div
-          className="absolute top-1 bottom-1 w-3 bg-primary rounded cursor-ew-resize z-20 hover:bg-primary/80"
+          className={`absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 transition-all duration-200 hover:w-4 hover:bg-primary/90 ${
+            isDraggingStart ? 'w-4 bg-primary/90 shadow-lg' : ''
+          }`}
           style={{ left: `${startPercentage}%` }}
           onMouseDown={(e) => {
             e.stopPropagation();
             setIsDraggingStart(true);
           }}
-        />
+        >
+          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-6 bg-primary-foreground rounded-full opacity-60" />
+        </div>
         
         {/* End trim handle */}
         <div
-          className="absolute top-1 bottom-1 w-3 bg-primary rounded cursor-ew-resize z-20 hover:bg-primary/80"
-          style={{ left: `${endPercentage - 3}%` }}
+          className={`absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 transition-all duration-200 hover:w-4 hover:bg-primary/90 ${
+            isDraggingEnd ? 'w-4 bg-primary/90 shadow-lg' : ''
+          }`}
+          style={{ left: `${endPercentage}%`, transform: 'translateX(-100%)' }}
           onMouseDown={(e) => {
             e.stopPropagation();
             setIsDraggingEnd(true);
           }}
-        />
+        >
+          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-6 bg-primary-foreground rounded-full opacity-60" />
+        </div>
         
         {/* Current time cursor */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-foreground z-30 cursor-ew-resize"
-          style={{ left: `${currentPercentage}%` }}
+          className={`absolute top-0 bottom-0 w-1 bg-accent-foreground rounded-full cursor-ew-resize z-30 transition-all duration-200 hover:w-1.5 hover:bg-accent-foreground/90 ${
+            isDraggingCursor ? 'w-1.5 bg-accent-foreground/90 shadow-lg' : ''
+          }`}
+          style={{ left: `${currentPercentage}%`, transform: 'translateX(-50%)' }}
           onMouseDown={(e) => {
             e.stopPropagation();
             setIsDraggingCursor(true);
           }}
-        />
+        >
+          <div className="absolute top-0 w-3 h-3 bg-accent-foreground rounded-full transform -translate-x-1/2 -translate-y-1/2" />
+        </div>
       </div>
 
       {/* Time indicators */}

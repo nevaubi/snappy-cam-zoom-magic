@@ -210,25 +210,42 @@ const SimpleVideoRecorder = () => {
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
+      const currentTime = videoRef.current.currentTime;
+      setCurrentTime(currentTime);
+      
+      // Enforce trim boundaries during playback
+      if (currentTime >= trimEnd && trimEnd > trimStart) {
+        videoRef.current.currentTime = trimStart;
+        videoRef.current.pause();
+        setIsPlaying(false);
+      } else if (currentTime < trimStart && trimEnd > trimStart) {
+        videoRef.current.currentTime = trimStart;
+      }
     }
   };
 
   const handlePlayPause = () => {
     if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
+      if (videoRef.current.paused) {
+        // Ensure we start within trim bounds
+        if (videoRef.current.currentTime < trimStart || videoRef.current.currentTime >= trimEnd) {
+          videoRef.current.currentTime = trimStart;
+        }
         videoRef.current.play();
+        setIsPlaying(true);
+      } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
       }
-      setIsPlaying(!isPlaying);
     }
   };
 
   const handleSeek = (time: number) => {
     if (videoRef.current) {
-      videoRef.current.currentTime = time;
-      setCurrentTime(time);
+      // Clamp seek time within trim bounds
+      const clampedTime = Math.max(trimStart, Math.min(trimEnd, time));
+      videoRef.current.currentTime = clampedTime;
+      setCurrentTime(clampedTime);
     }
   };
 
@@ -239,6 +256,17 @@ const SimpleVideoRecorder = () => {
   const handleTrimChange = (start: number, end: number) => {
     setTrimStart(start);
     setTrimEnd(end);
+    
+    // Real-time video seeking during trim
+    if (videoRef.current) {
+      const currentTime = videoRef.current.currentTime;
+      // If current time is outside the new trim bounds, seek to the nearest boundary
+      if (currentTime < start) {
+        videoRef.current.currentTime = start;
+      } else if (currentTime > end) {
+        videoRef.current.currentTime = end;
+      }
+    }
   };
 
   const handleSplit = (time: number) => {
