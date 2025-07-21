@@ -2,7 +2,11 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Play, Square, Download, Settings } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Play, Square, Download, Settings, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { CustomVideoPlayer } from './CustomVideoPlayer';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 type QualityPreset = 'standard' | 'high' | 'ultra';
 
@@ -47,6 +51,9 @@ const SimpleVideoRecorder = () => {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string>('');
   const [quality, setQuality] = useState<QualityPreset>('high');
   const [error, setError] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [supabaseVideoUrl, setSupabaseVideoUrl] = useState<string>('');
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -113,11 +120,14 @@ const SimpleVideoRecorder = () => {
         }
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
         const url = URL.createObjectURL(blob);
         setRecordedVideoUrl(url);
         setIsRecording(false);
+        
+        // Upload to Supabase
+        await uploadVideoToSupabase(blob, mimeType);
       };
 
       // Start recording with 1-second intervals for smoother data handling
@@ -138,6 +148,68 @@ const SimpleVideoRecorder = () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+    }
+  };
+
+  const uploadVideoToSupabase = async (blob: Blob, mimeType: string) => {
+    try {
+      setIsUploading(true);
+      setUploadProgress(0);
+      
+      const config = QUALITY_PRESETS[quality];
+      const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const filename = `screen-recording-${quality}-${new Date().toISOString().slice(0, 19)}.${extension}`;
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('recorded-videos')
+        .upload(filename, blob, {
+          contentType: mimeType,
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('recorded-videos')
+        .getPublicUrl(filename);
+
+      if (!urlData.publicUrl) throw new Error('Failed to get public URL');
+
+      // Create video element to get duration
+      const video = document.createElement('video');
+      video.src = URL.createObjectURL(blob);
+      
+      const duration = await new Promise<number>((resolve) => {
+        video.addEventListener('loadedmetadata', () => {
+          resolve(video.duration);
+        });
+      });
+
+      // Save metadata to database
+      const { error: dbError } = await supabase
+        .from('recordedvids')
+        .insert({
+          filename,
+          file_url: urlData.publicUrl,
+          file_size: blob.size,
+          duration,
+          quality_preset: quality
+        });
+
+      if (dbError) throw dbError;
+
+      setSupabaseVideoUrl(urlData.publicUrl);
+      setUploadProgress(100);
+      toast.success('Video uploaded successfully!');
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      setError('Failed to upload video. You can still download it locally.');
+      toast.error('Upload failed, but you can still download the video');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -227,17 +299,35 @@ const SimpleVideoRecorder = () => {
             )}
           </div>
 
-          {/* Recorded Video Playback */}
-          {recordedVideoUrl && (
+          {/* Upload Progress */}
+          {isUploading && (
             <div className="space-y-2">
-              <h3 className="text-sm font-medium">Recorded Video</h3>
-              <video
-                src={recordedVideoUrl}
-                controls
-                className="w-full max-h-96 bg-muted rounded-lg"
-              />
+              <div className="flex items-center gap-2">
+                <Upload className="w-4 h-4 animate-spin" />
+                <span className="text-sm font-medium">Uploading to cloud storage...</span>
+              </div>
+              <Progress value={uploadProgress} className="w-full" />
             </div>
           )}
+
+          {/* Recorded Video Playback */}
+          {supabaseVideoUrl ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <h3 className="text-sm font-medium">Cloud Video Ready</h3>
+              </div>
+              <CustomVideoPlayer src={supabaseVideoUrl} className="w-full" />
+            </div>
+          ) : recordedVideoUrl && !isUploading ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-yellow-500" />
+                <h3 className="text-sm font-medium">Local Video (Upload Failed)</h3>
+              </div>
+              <CustomVideoPlayer src={recordedVideoUrl} className="w-full" />
+            </div>
+          ) : null}
 
           {/* Recording Status */}
           {isRecording && (
