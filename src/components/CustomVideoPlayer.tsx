@@ -439,143 +439,125 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   };
 
   return (
-    <div className={cn("space-y-4", className)}>
-      <div 
-        className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
-        style={{
-          ...(backgroundType === 'color' 
-            ? { backgroundColor } 
-            : backgroundImage 
-              ? { 
-                  backgroundImage: `url(${backgroundImage})`,
-                  backgroundSize: backgroundImageFit,
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat'
-                }
-              : { backgroundColor }
-          ),
-        }}
-      >
-        <div 
-          className="relative"
-          style={{
-            transform: `scale(${(100 - videoPadding) / 100}) ${getCenteringTransform()}`.trim(),
-          }}
-        >
-          <div
-            className="relative transition-all duration-300"
+    <div className={cn("space-y-6", className)}>
+      {/* Main layout: Video player (75%) + Editing controls (25%) */}
+      <div className="grid lg:grid-cols-4 gap-6">
+        {/* Left Column - Video Player (75%) */}
+        <div className="lg:col-span-3">
+          <div 
+            className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
             style={{
-              borderRadius: `${videoCornerRadius}px`,
-              overflow: 'hidden',
+              ...(backgroundType === 'color' 
+                ? { backgroundColor } 
+                : backgroundImage 
+                  ? { 
+                      backgroundImage: `url(${backgroundImage})`,
+                      backgroundSize: backgroundImageFit,
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat'
+                    }
+                  : { backgroundColor }
+              ),
             }}
           >
-            <video
-              ref={videoRef}
-              src={src}
-              className="max-w-full max-h-full transition-all duration-300"
-              style={{
-                clipPath: getClipPath(),
-              }}
-              onClick={togglePlay}
-            />
-          </div>
-          
-          {isCropMode && (
             <div 
-              ref={cropOverlayRef}
-              className="absolute inset-0 cursor-move"
+              className="relative"
               style={{
-                borderRadius: `${videoCornerRadius}px`,
+                transform: `scale(${(100 - videoPadding) / 100}) ${getCenteringTransform()}`.trim(),
               }}
             >
-              <div className="absolute inset-0 bg-black/50" />
-              
-              <div 
-                className="absolute border-2 border-white bg-transparent"
+              <div
+                className="relative transition-all duration-300"
                 style={{
-                  left: `${cropSettings.x}%`,
-                  top: `${cropSettings.y}%`,
-                  width: `${cropSettings.width}%`,
-                  height: `${cropSettings.height}%`,
+                  borderRadius: `${videoCornerRadius}px`,
+                  overflow: 'hidden',
                 }}
-                onMouseDown={(e) => handleCropMouseDown(e, 'move')}
               >
-                <div className="absolute inset-0">
-                  <div className="absolute left-1/3 top-0 w-px h-full bg-white/30" />
-                  <div className="absolute left-2/3 top-0 w-px h-full bg-white/30" />
-                  <div className="absolute top-1/3 left-0 h-px w-full bg-white/30" />
-                  <div className="absolute top-2/3 left-0 h-px w-full bg-white/30" />
-                </div>
-                
-                <div 
-                  className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-nw-resize"
-                  onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
-                />
-                <div 
-                  className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-gray-300 cursor-ne-resize"
-                  onMouseDown={(e) => handleCropMouseDown(e, 'ne')}
-                />
-                <div 
-                  className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-sw-resize"
-                  onMouseDown={(e) => handleCropMouseDown(e, 'sw')}
-                />
-                <div 
-                  className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-gray-300 cursor-se-resize"
-                  onMouseDown={(e) => handleCropMouseDown(e, 'se')}
-                />
-                
-                <div 
-                  className="absolute -top-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-n-resize transform -translate-x-1/2"
-                  onMouseDown={(e) => handleCropMouseDown(e, 'n')}
-                />
-                <div 
-                  className="absolute -bottom-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-s-resize transform -translate-x-1/2"
-                  onMouseDown={(e) => handleCropMouseDown(e, 's')}
-                />
-                <div 
-                  className="absolute -left-1 top-1/2 w-2 h-3 bg-white border border-gray-300 cursor-w-resize transform -translate-y-1/2"
-                  onMouseDown={(e) => handleCropMouseDown(e, 'w')}
-                />
-                <div 
-                  className="absolute -right-1 top-1/2 w-2 h-3 bg-white border border-gray-300 cursor-e-resize transform -translate-y-1/2"
-                  onMouseDown={(e) => handleCropMouseDown(e, 'e')}
+                <video
+                  ref={videoRef}
+                  src={src}
+                  className="max-w-full max-h-full transition-all duration-300"
+                  style={{
+                    clipPath: getClipPath(),
+                  }}
+                  onClick={togglePlay}
                 />
               </div>
               
-              <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-mono">
-                {Math.round(cropSettings.width)}% × {Math.round(cropSettings.height)}%
-              </div>
+              {isCropMode && (
+                <div 
+                  ref={cropOverlayRef}
+                  className="absolute inset-0 cursor-move"
+                  style={{
+                    borderRadius: `${videoCornerRadius}px`,
+                  }}
+                >
+                  <div className="absolute inset-0 bg-black/50" />
+                  
+                  <div 
+                    className="absolute border-2 border-white bg-transparent"
+                    style={{
+                      left: `${cropSettings.x}%`,
+                      top: `${cropSettings.y}%`,
+                      width: `${cropSettings.width}%`,
+                      height: `${cropSettings.height}%`,
+                    }}
+                    onMouseDown={(e) => handleCropMouseDown(e, 'move')}
+                  >
+                    <div className="absolute inset-0">
+                      <div className="absolute left-1/3 top-0 w-px h-full bg-white/30" />
+                      <div className="absolute left-2/3 top-0 w-px h-full bg-white/30" />
+                      <div className="absolute top-1/3 left-0 h-px w-full bg-white/30" />
+                      <div className="absolute top-2/3 left-0 h-px w-full bg-white/30" />
+                    </div>
+                    
+                    <div 
+                      className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-nw-resize"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
+                    />
+                    <div 
+                      className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-gray-300 cursor-ne-resize"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'ne')}
+                    />
+                    <div 
+                      className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-sw-resize"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'sw')}
+                    />
+                    <div 
+                      className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-gray-300 cursor-se-resize"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'se')}
+                    />
+                    
+                    <div 
+                      className="absolute -top-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-n-resize transform -translate-x-1/2"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'n')}
+                    />
+                    <div 
+                      className="absolute -bottom-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-s-resize transform -translate-x-1/2"
+                      onMouseDown={(e) => handleCropMouseDown(e, 's')}
+                    />
+                    <div 
+                      className="absolute -left-1 top-1/2 w-2 h-3 bg-white border border-gray-300 cursor-w-resize transform -translate-y-1/2"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'w')}
+                    />
+                    <div 
+                      className="absolute -right-1 top-1/2 w-2 h-3 bg-white border border-gray-300 cursor-e-resize transform -translate-y-1/2"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'e')}
+                    />
+                  </div>
+                  
+                  <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-mono">
+                    {Math.round(cropSettings.width)}% × {Math.round(cropSettings.height)}%
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
-      </div>
-      
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{formatTime(currentTime - trimStart)}</span>
-          <span>{
-            trimEnd > trimStart 
-              ? formatTime(trimEnd - trimStart) 
-              : (duration > 0 ? formatTime(duration) : 'Loading...')
-          }</span>
-        </div>
-        
-        <Slider
-          value={[
-            trimEnd > trimStart 
-              ? ((currentTime - trimStart) / (trimEnd - trimStart)) * 100 
-              : 0
-          ]}
-          onValueChange={handleSeek}
-          max={100}
-          step={0.1}
-          className="w-full cursor-pointer"
-        />
-      </div>
-      
-      {/* Two-column layout for editing controls */}
-      <div className="grid md:grid-cols-2 gap-6 border-t border-border pt-4">
-        {/* Left Column - Display Settings */}
+
+        {/* Right Column - Editing Controls Sidebar (25%) */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* Display Settings */}
         <div className="space-y-4">
           <h3 className="text-sm font-medium flex items-center gap-2">
             <Palette className="h-4 w-4" />
@@ -756,7 +738,33 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           </div>
         </div>
       </div>
+      </div>
 
+      {/* Bottom Section - Full-width Progress Bar */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{formatTime(currentTime - trimStart)}</span>
+          <span>{
+            trimEnd > trimStart 
+              ? formatTime(trimEnd - trimStart) 
+              : (duration > 0 ? formatTime(duration) : 'Loading...')
+          }</span>
+        </div>
+        
+        <Slider
+          value={[
+            trimEnd > trimStart 
+              ? ((currentTime - trimStart) / (trimEnd - trimStart)) * 100 
+              : 0
+          ]}
+          onValueChange={handleSeek}
+          max={100}
+          step={0.1}
+          className="w-full cursor-pointer"
+        />
+      </div>
+
+      {/* Full-width Transport Controls */}
       <div className="flex items-center gap-4">
         <Button
           onClick={handlePlay}
