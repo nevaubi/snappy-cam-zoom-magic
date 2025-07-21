@@ -34,7 +34,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Export functionality
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
-  const { processVideo } = useVideoProcessor();
+  const { processVideo, loadFFmpeg } = useVideoProcessor();
   
   // Background color presets
   const colorPresets = [
@@ -284,7 +284,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
       // Pre-load FFmpeg to show loading state
       console.log('Pre-loading FFmpeg...');
-      await processVideo.loadFFmpeg?.();
+      await loadFFmpeg();
       console.log('FFmpeg loaded, starting export...');
 
       const options = {
