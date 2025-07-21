@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Play, Square, Download, Settings } from 'lucide-react';
 import { VideoTimeline } from './VideoTimeline';
 import { VideoControls } from './VideoControls';
+import { CustomVideoRenderer, CustomVideoRendererRef } from './CustomVideoRenderer';
 import { useVideoProcessor } from '@/hooks/useVideoProcessor';
 import { toast } from '@/hooks/use-toast';
 
@@ -65,7 +66,7 @@ const SimpleVideoRecorder = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRendererRef = useRef<CustomVideoRendererRef>(null);
   
   const { processVideo } = useVideoProcessor();
 
@@ -174,97 +175,60 @@ const SimpleVideoRecorder = () => {
     }
   };
 
-  // Video editing functions
-  const handleVideoLoad = () => {
-    console.log('Video load event triggered');
-    if (videoRef.current) {
-      const duration = videoRef.current.duration;
-      console.log('Video duration:', duration);
+  // Video editing functions with custom renderer
+  const handleVideoLoadedData = () => {
+    const renderer = videoRendererRef.current;
+    if (renderer) {
+      const duration = renderer.getDuration();
       if (duration && !isNaN(duration) && isFinite(duration) && duration > 0) {
-        console.log('Setting video duration:', duration);
         setVideoDuration(duration);
         setTrimStart(0);
         setTrimEnd(duration);
         setSplitPoints([]);
-      } else {
-        console.log('Invalid duration, retrying...');
-        // Retry after a short delay
-        setTimeout(() => {
-          if (videoRef.current && videoRef.current.duration > 0) {
-            const retryDuration = videoRef.current.duration;
-            console.log('Retry duration:', retryDuration);
-            setVideoDuration(retryDuration);
-            setTrimStart(0);
-            setTrimEnd(retryDuration);
-            setSplitPoints([]);
-          }
-        }, 100);
       }
     }
   };
 
-  const handleVideoLoadedData = () => {
-    console.log('Video loadeddata event triggered');
-    handleVideoLoad();
-  };
-
-  const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      const currentTime = videoRef.current.currentTime;
-      setCurrentTime(currentTime);
-      
-      // Enforce trim boundaries during playback
-      if (currentTime >= trimEnd && trimEnd > trimStart) {
-        videoRef.current.currentTime = trimStart;
-        videoRef.current.pause();
-        setIsPlaying(false);
-      } else if (currentTime < trimStart && trimEnd > trimStart) {
-        videoRef.current.currentTime = trimStart;
-      }
-    }
+  const handleTimeUpdate = (time: number) => {
+    setCurrentTime(time);
   };
 
   const handlePlayPause = () => {
-    if (videoRef.current) {
-      if (videoRef.current.paused) {
-        // Ensure we start within trim bounds
-        if (videoRef.current.currentTime < trimStart || videoRef.current.currentTime >= trimEnd) {
-          videoRef.current.currentTime = trimStart;
-        }
-        videoRef.current.play();
-        setIsPlaying(true);
-      } else {
-        videoRef.current.pause();
-        setIsPlaying(false);
-      }
+    const renderer = videoRendererRef.current;
+    if (!renderer) return;
+
+    if (isPlaying) {
+      renderer.pause();
+      setIsPlaying(false);
+    } else {
+      renderer.play();
+      setIsPlaying(true);
     }
   };
 
   const handleSeek = (time: number) => {
-    if (videoRef.current) {
-      // Clamp seek time within trim bounds
-      const clampedTime = Math.max(trimStart, Math.min(trimEnd, time));
-      videoRef.current.currentTime = clampedTime;
-      setCurrentTime(clampedTime);
+    const renderer = videoRendererRef.current;
+    if (renderer) {
+      renderer.seek(time);
     }
   };
 
   const handleGoToStart = () => {
-    handleSeek(0);
+    const renderer = videoRendererRef.current;
+    if (renderer) {
+      renderer.seek(trimStart);
+    }
   };
 
   const handleTrimChange = (start: number, end: number) => {
     setTrimStart(start);
     setTrimEnd(end);
     
-    // Real-time video seeking during trim
-    if (videoRef.current) {
-      const currentTime = videoRef.current.currentTime;
-      // If current time is outside the new trim bounds, seek to the nearest boundary
-      if (currentTime < start) {
-        videoRef.current.currentTime = start;
-      } else if (currentTime > end) {
-        videoRef.current.currentTime = end;
+    // If current time is outside new trim bounds, seek to start
+    if (currentTime < start || currentTime > end) {
+      const renderer = videoRendererRef.current;
+      if (renderer) {
+        renderer.seek(start);
       }
     }
   };
@@ -389,21 +353,22 @@ const SimpleVideoRecorder = () => {
             )}
           </div>
 
-          {/* Recorded Video Playback */}
+          {/* Recorded Video Playback with Custom Renderer */}
           {recordedVideoUrl && (
             <div className="space-y-4">
               <h3 className="text-sm font-medium">Recorded Video</h3>
-              <video
-                ref={videoRef}
-                src={recordedVideoUrl}
-                className="w-full max-h-96 bg-muted rounded-lg"
-                onLoadedMetadata={handleVideoLoad}
-                onLoadedData={handleVideoLoadedData}
-                onCanPlay={handleVideoLoad}
+              
+              {/* Custom Video Renderer */}
+              <CustomVideoRenderer
+                ref={videoRendererRef}
+                videoSrc={recordedVideoUrl}
+                trimStart={trimStart}
+                trimEnd={trimEnd}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
                 onTimeUpdate={handleTimeUpdate}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                controls
+                onLoadedData={handleVideoLoadedData}
+                className="w-full max-h-96"
               />
               
               {/* Video Editing Controls */}
@@ -422,7 +387,7 @@ const SimpleVideoRecorder = () => {
                   </div>
                   
                   <VideoTimeline
-                    videoRef={videoRef}
+                    videoRef={null}
                     duration={videoDuration}
                     currentTime={currentTime}
                     onSeek={handleSeek}

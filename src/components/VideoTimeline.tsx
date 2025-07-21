@@ -26,9 +26,7 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
   splitPoints
 }) => {
   const timelineRef = useRef<HTMLDivElement>(null);
-  const [isDraggingStart, setIsDraggingStart] = useState(false);
-  const [isDraggingEnd, setIsDraggingEnd] = useState(false);
-  const [isDraggingCursor, setIsDraggingCursor] = useState(false);
+  const [isDragging, setIsDragging] = useState<'start' | 'end' | 'cursor' | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
   const [contextMenuTime, setContextMenuTime] = useState(0);
@@ -41,7 +39,7 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
   };
 
   const handleTimelineClick = (e: React.MouseEvent) => {
-    if (isDraggingStart || isDraggingEnd || isDraggingCursor) return;
+    if (isDragging) return;
     const time = getTimeFromPosition(e.clientX);
     onSeek(time);
   };
@@ -71,26 +69,24 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
     const handleMouseMove = (e: MouseEvent) => {
       const time = getTimeFromPosition(e.clientX);
       
-      if (isDraggingStart) {
+      if (isDragging === 'start') {
         onTrimChange(Math.min(time, trimEnd - 0.1), trimEnd);
-      } else if (isDraggingEnd) {
+      } else if (isDragging === 'end') {
         onTrimChange(trimStart, Math.max(time, trimStart + 0.1));
-      } else if (isDraggingCursor) {
+      } else if (isDragging === 'cursor') {
         onSeek(time);
       }
     };
 
     const handleMouseUp = () => {
-      setIsDraggingStart(false);
-      setIsDraggingEnd(false);
-      setIsDraggingCursor(false);
+      setIsDragging(null);
     };
 
     const handleClickOutside = () => {
       setShowContextMenu(false);
     };
 
-    if (isDraggingStart || isDraggingEnd || isDraggingCursor) {
+    if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
@@ -104,7 +100,7 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('click', handleClickOutside);
     };
-  }, [isDraggingStart, isDraggingEnd, isDraggingCursor, showContextMenu, trimStart, trimEnd, duration, onTrimChange, onSeek]);
+  }, [isDragging, showContextMenu, trimStart, trimEnd, duration, onTrimChange, onSeek]);
 
   if (duration === 0) return null;
 
@@ -113,86 +109,86 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
   const currentPercentage = (currentTime / duration) * 100;
 
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>0s</span>
-        <span>{formatTime(duration)}</span>
-      </div>
-      
+    <div className="w-full space-y-4">
+      {/* Full width timeline */}
       <div 
         ref={timelineRef}
-        className="relative h-16 bg-muted rounded-lg cursor-pointer select-none transition-all duration-200 hover:bg-muted/80"
+        className="relative h-20 bg-secondary rounded-lg cursor-pointer select-none transition-all duration-200 hover:bg-secondary/80"
         onClick={handleTimelineClick}
         onContextMenu={handleRightClick}
       >
-        {/* Full timeline background */}
-        <div className="absolute inset-0 bg-muted-foreground/20 rounded-lg" />
-        
-        {/* Trimmed section */}
-        <div 
-          className="absolute top-0 bottom-0 bg-primary/40 rounded-lg border-2 border-primary/60 transition-colors duration-200"
-          style={{
-            left: `${startPercentage}%`,
-            width: `${endPercentage - startPercentage}%`
-          }}
-        />
-        
-        {/* Split points */}
-        {splitPoints.map((splitTime, index) => (
+        {/* Background progress */}
+        <div className="absolute inset-2 bg-muted rounded-md overflow-hidden">
+          {/* Trimmed section */}
           <div
-            key={index}
-            className="absolute top-0 bottom-0 w-0.5 bg-destructive z-10"
-            style={{ left: `${(splitTime / duration) * 100}%` }}
+            className="absolute top-0 h-full bg-gradient-to-r from-primary/20 to-primary/30 border-l-2 border-r-2 border-primary transition-all duration-200"
+            style={{
+              left: `${(trimStart / duration) * 100}%`,
+              width: `${((trimEnd - trimStart) / duration) * 100}%`,
+            }}
           />
-        ))}
-        
-        {/* Start trim handle */}
-        <div
-          className={`absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 transition-all duration-200 hover:w-4 hover:bg-primary/90 ${
-            isDraggingStart ? 'w-4 bg-primary/90 shadow-lg' : ''
-          }`}
-          style={{ left: `${startPercentage}%` }}
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            setIsDraggingStart(true);
-          }}
-        >
-          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-6 bg-primary-foreground rounded-full opacity-60" />
+
+          {/* Current time cursor */}
+          <div
+            className="absolute top-0 w-1 h-full bg-accent z-30 transition-all duration-100 shadow-sm rounded-full"
+            style={{
+              left: `${(currentTime / duration) * 100}%`,
+            }}
+          />
+
+          {/* Split points */}
+          {splitPoints.map((point, index) => (
+            <div
+              key={index}
+              className="absolute top-0 w-0.5 h-full bg-destructive z-20 shadow-sm"
+              style={{
+                left: `${(point / duration) * 100}%`,
+              }}
+            />
+          ))}
         </div>
-        
-        {/* End trim handle */}
+
+        {/* Trim Start Handle */}
         <div
-          className={`absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 transition-all duration-200 hover:w-4 hover:bg-primary/90 ${
-            isDraggingEnd ? 'w-4 bg-primary/90 shadow-lg' : ''
+          className={`absolute top-1 w-5 h-16 bg-primary rounded-l-md cursor-ew-resize z-40 border border-primary-foreground/20 shadow-md hover:bg-primary/90 hover:scale-105 transition-all duration-150 ${
+            isDragging === 'start' ? 'bg-primary/80 scale-105 shadow-lg' : ''
           }`}
-          style={{ left: `${endPercentage}%`, transform: 'translateX(-100%)' }}
+          style={{
+            left: `calc(${(trimStart / duration) * 100}% + 8px - 10px)`,
+          }}
           onMouseDown={(e) => {
             e.stopPropagation();
-            setIsDraggingEnd(true);
+            setIsDragging('start');
           }}
         >
-          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-6 bg-primary-foreground rounded-full opacity-60" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-0.5 h-10 bg-primary-foreground/80 rounded-full" />
+          </div>
         </div>
-        
-        {/* Current time cursor */}
+
+        {/* Trim End Handle */}
         <div
-          className={`absolute top-0 bottom-0 w-1 bg-accent-foreground rounded-full cursor-ew-resize z-30 transition-all duration-200 hover:w-1.5 hover:bg-accent-foreground/90 ${
-            isDraggingCursor ? 'w-1.5 bg-accent-foreground/90 shadow-lg' : ''
+          className={`absolute top-1 w-5 h-16 bg-primary rounded-r-md cursor-ew-resize z-40 border border-primary-foreground/20 shadow-md hover:bg-primary/90 hover:scale-105 transition-all duration-150 ${
+            isDragging === 'end' ? 'bg-primary/80 scale-105 shadow-lg' : ''
           }`}
-          style={{ left: `${currentPercentage}%`, transform: 'translateX(-50%)' }}
+          style={{
+            left: `calc(${(trimEnd / duration) * 100}% + 8px - 10px)`,
+          }}
           onMouseDown={(e) => {
             e.stopPropagation();
-            setIsDraggingCursor(true);
+            setIsDragging('end');
           }}
         >
-          <div className="absolute top-0 w-3 h-3 bg-accent-foreground rounded-full transform -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-0.5 h-10 bg-primary-foreground/80 rounded-full" />
+          </div>
         </div>
       </div>
 
-      {/* Time indicators */}
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>Trim: {formatTime(trimStart)} - {formatTime(trimEnd)}</span>
-        <span>Current: {formatTime(currentTime)}</span>
+      {/* Time labels - simplified */}
+      <div className="flex justify-between text-sm text-muted-foreground font-mono">
+        <span>0</span>
+        <span>{formatTime(duration)}</span>
       </div>
 
       {/* Context menu */}
@@ -208,7 +204,7 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
             className="flex items-center gap-2 w-full justify-start"
           >
             <Scissors className="w-3 h-3" />
-            Split here ({formatTime(contextMenuTime)})
+            Split at {formatTime(contextMenuTime)}
           </Button>
         </div>
       )}
