@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
@@ -555,189 +556,215 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           </div>
         </div>
 
-        {/* Right Column - Editing Controls Sidebar (25%) */}
-        <div className="lg:col-span-1 space-y-6">
-          {/* Display Settings */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium flex items-center gap-2">
-            <Palette className="h-4 w-4" />
-            Display Settings
-          </h3>
-          
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-muted-foreground flex items-center gap-2">
-                <Maximize className="h-3 w-3" />
-                Video Scale
-              </label>
-              <span className="text-sm font-mono">{100 - videoPadding}%</span>
-            </div>
-            <Slider
-              value={[videoPadding]}
-              onValueChange={(value) => setVideoPadding(value[0])}
-              max={100}
-              min={0}
-              step={1}
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-muted-foreground flex items-center gap-2">
-                <CornerDownLeft className="h-3 w-3" />
-                Corner Rounding
-              </label>
-              <span className="text-sm font-mono">{videoCornerRadius}px</span>
-            </div>
-            <Slider
-              value={[videoCornerRadius]}
-              onValueChange={(value) => setVideoCornerRadius(value[0])}
-              max={20}
-              min={0}
-              step={1}
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm text-muted-foreground flex items-center gap-2">
-              <Crop className="h-3 w-3" />
-              Video Cropping
-            </label>
-            <div className="flex gap-2">
-              <Button
-                onClick={toggleCropMode}
-                variant={isCropMode ? "default" : "outline"}
-                size="sm"
-              >
-                <Crop className="h-3 w-3 mr-2" />
-                {isCropMode ? 'Exit Crop' : 'Crop Video'}
-              </Button>
+        {/* Right Column - Tabbed Editing Controls Sidebar (25%) */}
+        <div className="lg:col-span-1">
+          <div className="bg-card/50 border border-border rounded-lg p-4 shadow-sm">
+            <Tabs defaultValue="display" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="display" className="flex items-center gap-2 text-xs">
+                  <Settings className="h-3 w-3" />
+                  Display
+                </TabsTrigger>
+                <TabsTrigger value="zoom" className="flex items-center gap-2 text-xs">
+                  <ZoomIn className="h-3 w-3" />
+                  Zoom
+                </TabsTrigger>
+              </TabsList>
               
-              {isCropMode && (
-                <>
-                  <Button
-                    onClick={applyCrop}
-                    variant="default"
-                    size="sm"
-                  >
-                    Apply
-                  </Button>
-                  <Button
-                    onClick={resetCrop}
-                    variant="outline"
-                    size="sm"
-                    disabled={cropSettings.x === 0 && cropSettings.y === 0 && cropSettings.width === 100 && cropSettings.height === 100}
-                  >
-                    Reset
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+              <TabsContent value="display" className="space-y-6 mt-0">
+                {/* Display Settings */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <Palette className="h-4 w-4" />
+                    Display Settings
+                  </h3>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Maximize className="h-3 w-3" />
+                        Video Scale
+                      </label>
+                      <span className="text-sm font-mono">{100 - videoPadding}%</span>
+                    </div>
+                    <Slider
+                      value={[videoPadding]}
+                      onValueChange={(value) => setVideoPadding(value[0])}
+                      max={100}
+                      min={0}
+                      step={1}
+                      className="w-full"
+                    />
+                  </div>
 
-        {/* Right Column - Background Settings */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium flex items-center gap-2">
-            <ImageIcon className="h-4 w-4" />
-            Background Settings
-          </h3>
-          
-          {/* Color presets */}
-          <div>
-            <label className="text-xs text-muted-foreground mb-2 block">Color Presets</label>
-            <div className="flex flex-wrap gap-2">
-              {colorPresets.map((color) => (
-                <button
-                  key={color.value}
-                  onClick={() => setBackgroundColor(color.value)}
-                  className={cn(
-                    "w-8 h-8 rounded-full border-2 transition-all duration-200 hover:scale-110",
-                    backgroundColor === color.value 
-                      ? "border-primary shadow-lg scale-110" 
-                      : "border-border hover:border-muted-foreground"
-                  )}
-                  style={{ backgroundColor: color.value }}
-                  title={color.name}
-                  aria-label={`Set background to ${color.name}`}
-                />
-              ))}
-            </div>
-          </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-muted-foreground flex items-center gap-2">
+                        <CornerDownLeft className="h-3 w-3" />
+                        Corner Rounding
+                      </label>
+                      <span className="text-sm font-mono">{videoCornerRadius}px</span>
+                    </div>
+                    <Slider
+                      value={[videoCornerRadius]}
+                      onValueChange={(value) => setVideoCornerRadius(value[0])}
+                      max={20}
+                      min={0}
+                      step={1}
+                      className="w-full"
+                    />
+                  </div>
 
-          {/* Image options */}
-          <div className="space-y-3">
-            <div className="space-y-3">
-              {/* Default images */}
-              <div>
-                <label className="text-xs text-muted-foreground mb-2 block">Default Images</label>
-                <div className="flex gap-2">
-                  {defaultImages.map((image) => (
-                    <button
-                      key={image.name}
-                      onClick={() => selectDefaultImage(image.src)}
-                      className={cn(
-                        "w-16 h-16 rounded-md border-2 transition-all duration-200 hover:scale-105 bg-cover bg-center",
-                        backgroundImage === image.src ? "border-primary shadow-lg scale-105" : "border-border hover:border-muted-foreground"
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Crop className="h-3 w-3" />
+                      Video Cropping
+                    </label>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={toggleCropMode}
+                        variant={isCropMode ? "default" : "outline"}
+                        size="sm"
+                      >
+                        <Crop className="h-3 w-3 mr-2" />
+                        {isCropMode ? 'Exit Crop' : 'Crop Video'}
+                      </Button>
+                      
+                      {isCropMode && (
+                        <>
+                          <Button
+                            onClick={applyCrop}
+                            variant="default"
+                            size="sm"
+                          >
+                            Apply
+                          </Button>
+                          <Button
+                            onClick={resetCrop}
+                            variant="outline"
+                            size="sm"
+                            disabled={cropSettings.x === 0 && cropSettings.y === 0 && cropSettings.width === 100 && cropSettings.height === 100}
+                          >
+                            Reset
+                          </Button>
+                        </>
                       )}
-                      style={{ backgroundImage: `url(${image.src})` }}
-                      title={image.name}
-                      aria-label={`Set background to ${image.name}`}
-                    />
-                  ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              {/* Custom upload */}
-              <div>
-                <label className="text-xs text-muted-foreground mb-2 block">Upload Custom Image</label>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2 px-3 py-2 border border-input rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                    <Upload className="w-4 h-4" />
-                    <span className="text-sm">Choose Image</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                  </label>
-                  {backgroundImage && !defaultImages.some(img => img.src === backgroundImage) && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => {
-                        setBackgroundImage(null);
-                        setBackgroundType('color');
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-              </div>
+                {/* Background Settings */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" />
+                    Background Settings
+                  </h3>
+                  
+                  {/* Color presets */}
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-2 block">Color Presets</label>
+                    <div className="flex flex-wrap gap-2">
+                      {colorPresets.map((color) => (
+                        <button
+                          key={color.value}
+                          onClick={() => setBackgroundColor(color.value)}
+                          className={cn(
+                            "w-8 h-8 rounded-full border-2 transition-all duration-200 hover:scale-110",
+                            backgroundColor === color.value 
+                              ? "border-primary shadow-lg scale-110" 
+                              : "border-border hover:border-muted-foreground"
+                          )}
+                          style={{ backgroundColor: color.value }}
+                          title={color.name}
+                          aria-label={`Set background to ${color.name}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Image fit controls */}
-              {backgroundImage && (
-                <div>
-                  <label className="text-xs text-muted-foreground mb-2 block">Image Fit</label>
-                  <select 
-                    value={backgroundImageFit}
-                    onChange={(e) => setBackgroundImageFit(e.target.value as 'cover' | 'contain' | 'fill')}
-                    className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground text-sm"
-                  >
-                    <option value="cover">Cover (fill area, may crop)</option>
-                    <option value="contain">Contain (fit within area)</option>
-                    <option value="fill">Fill (stretch to fit)</option>
-                  </select>
+                  {/* Image options */}
+                  <div className="space-y-3">
+                    <div className="space-y-3">
+                      {/* Default images */}
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-2 block">Default Images</label>
+                        <div className="flex gap-2">
+                          {defaultImages.map((image) => (
+                            <button
+                              key={image.name}
+                              onClick={() => selectDefaultImage(image.src)}
+                              className={cn(
+                                "w-16 h-16 rounded-md border-2 transition-all duration-200 hover:scale-105 bg-cover bg-center",
+                                backgroundImage === image.src ? "border-primary shadow-lg scale-105" : "border-border hover:border-muted-foreground"
+                              )}
+                              style={{ backgroundImage: `url(${image.src})` }}
+                              title={image.name}
+                              aria-label={`Set background to ${image.name}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Custom upload */}
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-2 block">Upload Custom Image</label>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-2 px-3 py-2 border border-input rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
+                            <Upload className="w-4 h-4" />
+                            <span className="text-sm">Choose Image</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleImageUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          {backgroundImage && !defaultImages.some(img => img.src === backgroundImage) && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => {
+                                setBackgroundImage(null);
+                                setBackgroundType('color');
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Image fit controls */}
+                      {backgroundImage && (
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-2 block">Image Fit</label>
+                          <select 
+                            value={backgroundImageFit}
+                            onChange={(e) => setBackgroundImageFit(e.target.value as 'cover' | 'contain' | 'fill')}
+                            className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground text-sm"
+                          >
+                            <option value="cover">Cover (fill area, may crop)</option>
+                            <option value="contain">Contain (fit within area)</option>
+                            <option value="fill">Fill (stretch to fit)</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+              </TabsContent>
+              
+              <TabsContent value="zoom" className="space-y-4 mt-0">
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <div className="text-center space-y-2">
+                    <ZoomIn className="h-12 w-12 mx-auto opacity-50" />
+                    <p className="text-sm">Zoom controls coming soon</p>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
-      </div>
       </div>
 
       {/* Bottom Section - Full-width Progress Bar */}
