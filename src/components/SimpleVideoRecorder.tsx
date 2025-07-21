@@ -263,22 +263,26 @@ const SimpleVideoRecorder = () => {
 
   // Video editing functions with custom renderer
   const handleVideoLoadedData = () => {
-    console.log('Video loaded data event triggered');
+    console.log('SimpleVideoRecorder: Video loaded data event triggered');
     const renderer = videoRendererRef.current;
     if (renderer) {
       const duration = renderer.getDuration();
-      console.log('Video duration from renderer:', duration);
-      if (duration && !isNaN(duration) && isFinite(duration) && duration > 0) {
+      console.log('SimpleVideoRecorder: Video duration from renderer:', duration);
+      
+      // Accept any positive, finite duration
+      if (duration > 0 && isFinite(duration)) {
         setVideoDuration(duration);
         setTrimStart(0);
         setTrimEnd(duration);
         setSplitPoints([]);
-        console.log('Video duration set successfully:', duration);
+        console.log('SimpleVideoRecorder: Video duration set successfully:', duration);
       } else {
-        console.warn('Invalid video duration detected:', duration);
+        console.warn('SimpleVideoRecorder: Invalid video duration, but showing controls anyway:', duration);
+        // Show controls even without valid duration - user can still interact with video
+        setVideoDuration(0); // Keep as 0 to show loading state
       }
     } else {
-      console.warn('Video renderer ref not available');
+      console.warn('SimpleVideoRecorder: Video renderer ref not available');
     }
   };
 

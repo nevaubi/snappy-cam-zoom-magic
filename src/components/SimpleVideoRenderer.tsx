@@ -49,18 +49,79 @@ export const SimpleVideoRenderer = forwardRef<SimpleVideoRendererRef, SimpleVide
       getDuration: () => duration,
     }));
 
-    // Handle video metadata loaded
-    const handleLoadedData = () => {
-      console.log('SimpleVideoRenderer: handleLoadedData called');
+    // Handle video metadata loaded - using multiple events for better compatibility
+    const handleLoadedMetadata = () => {
+      console.log('SimpleVideoRenderer: handleLoadedMetadata called');
       if (videoRef.current) {
         const videoDuration = videoRef.current.duration;
         console.log('SimpleVideoRenderer: video duration:', videoDuration);
         console.log('SimpleVideoRenderer: video readyState:', videoRef.current.readyState);
         console.log('SimpleVideoRenderer: video src:', videoRef.current.src);
-        setDuration(videoDuration);
-        onLoadedData();
+        
+        // Validate duration - reject Infinity, NaN, or negative values
+        if (isFinite(videoDuration) && videoDuration > 0) {
+          console.log('SimpleVideoRenderer: Valid duration detected:', videoDuration);
+          setDuration(videoDuration);
+          onLoadedData();
+        } else {
+          console.warn('SimpleVideoRenderer: Invalid duration, trying fallback methods:', videoDuration);
+          // Try alternative methods to get duration
+          tryAlternativeDurationDetection();
+        }
       } else {
         console.warn('SimpleVideoRenderer: videoRef.current is null');
+      }
+    };
+
+    // Fallback method for duration detection
+    const tryAlternativeDurationDetection = () => {
+      console.log('SimpleVideoRenderer: Attempting alternative duration detection');
+      if (videoRef.current) {
+        // Wait a bit and try again - sometimes duration loads asynchronously
+        setTimeout(() => {
+          if (videoRef.current) {
+            const retryDuration = videoRef.current.duration;
+            console.log('SimpleVideoRenderer: Retry duration:', retryDuration);
+            
+            if (isFinite(retryDuration) && retryDuration > 0) {
+              console.log('SimpleVideoRenderer: Duration detected on retry:', retryDuration);
+              setDuration(retryDuration);
+              onLoadedData();
+            } else {
+              console.error('SimpleVideoRenderer: Failed to get valid duration after retry');
+              // Still call onLoadedData to show controls, even without duration
+              onLoadedData();
+            }
+          }
+        }, 500);
+      }
+    };
+
+    // Handle when video can start playing
+    const handleCanPlay = () => {
+      console.log('SimpleVideoRenderer: handleCanPlay called');
+      if (videoRef.current && duration === 0) {
+        const videoDuration = videoRef.current.duration;
+        console.log('SimpleVideoRenderer: canplay duration check:', videoDuration);
+        
+        if (isFinite(videoDuration) && videoDuration > 0) {
+          console.log('SimpleVideoRenderer: Duration set from canplay event:', videoDuration);
+          setDuration(videoDuration);
+        }
+      }
+    };
+
+    // Handle duration change events
+    const handleDurationChange = () => {
+      console.log('SimpleVideoRenderer: handleDurationChange called');
+      if (videoRef.current) {
+        const videoDuration = videoRef.current.duration;
+        console.log('SimpleVideoRenderer: durationchange event duration:', videoDuration);
+        
+        if (isFinite(videoDuration) && videoDuration > 0) {
+          console.log('SimpleVideoRenderer: Duration updated from durationchange:', videoDuration);
+          setDuration(videoDuration);
+        }
       }
     };
 
@@ -112,8 +173,17 @@ export const SimpleVideoRenderer = forwardRef<SimpleVideoRendererRef, SimpleVide
           ref={videoRef}
           src={videoSrc}
           className="w-full h-full object-contain"
-          onLoadedData={handleLoadedData}
+          onLoadedMetadata={handleLoadedMetadata}
+          onCanPlay={handleCanPlay}
+          onDurationChange={handleDurationChange}
           onTimeUpdate={handleTimeUpdate}
+          onError={(e) => {
+            console.error('SimpleVideoRenderer: Video error:', e);
+            // Still call onLoadedData to show controls even with error
+            onLoadedData();
+          }}
+          onLoadStart={() => console.log('SimpleVideoRenderer: Load start')}
+          onProgress={() => console.log('SimpleVideoRenderer: Progress event')}
           controls={false}
         />
         
