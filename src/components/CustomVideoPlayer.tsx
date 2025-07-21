@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, RotateCcw, Palette, Maximize } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CustomVideoPlayerProps {
@@ -26,6 +26,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   
   // Video display styling states
   const [videoPadding, setVideoPadding] = useState(0);
+  const [videoCornerRadius, setVideoCornerRadius] = useState(8);
   const [backgroundColor, setBackgroundColor] = useState('#000000');
   
   // Background color presets
@@ -274,9 +275,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         <video
           ref={videoRef}
           src={src}
-          className="max-w-full max-h-full rounded-lg transition-transform duration-300"
+          className="max-w-full max-h-full transition-transform duration-300"
           style={{
             transform: `scale(${(100 - videoPadding) / 100})`,
+            borderRadius: `${videoCornerRadius}px`,
           }}
           onClick={togglePlay}
         />
@@ -326,6 +328,25 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             value={[videoPadding]}
             onValueChange={(value) => setVideoPadding(value[0])}
             max={100}
+            min={0}
+            step={1}
+            className="w-full"
+          />
+        </div>
+
+        {/* Corner Rounding Slider */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-muted-foreground flex items-center gap-2">
+              <CornerDownLeft className="h-3 w-3" />
+              Corner Rounding
+            </label>
+            <span className="text-sm font-mono">{videoCornerRadius}px</span>
+          </div>
+          <Slider
+            value={[videoCornerRadius]}
+            onValueChange={(value) => setVideoCornerRadius(value[0])}
+            max={20}
             min={0}
             step={1}
             className="w-full"
