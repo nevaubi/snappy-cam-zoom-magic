@@ -573,87 +573,95 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         />
       </div>
       
-      <div className="space-y-4 border-t border-border pt-4">
-        <h3 className="text-sm font-medium flex items-center gap-2">
-          <Palette className="h-4 w-4" />
-          Display Settings
-        </h3>
-        
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-muted-foreground flex items-center gap-2">
-              <Maximize className="h-3 w-3" />
-              Video Scale
-            </label>
-            <span className="text-sm font-mono">{100 - videoPadding}%</span>
-          </div>
-          <Slider
-            value={[videoPadding]}
-            onValueChange={(value) => setVideoPadding(value[0])}
-            max={100}
-            min={0}
-            step={1}
-            className="w-full"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-muted-foreground flex items-center gap-2">
-              <CornerDownLeft className="h-3 w-3" />
-              Corner Rounding
-            </label>
-            <span className="text-sm font-mono">{videoCornerRadius}px</span>
-          </div>
-          <Slider
-            value={[videoCornerRadius]}
-            onValueChange={(value) => setVideoCornerRadius(value[0])}
-            max={20}
-            min={0}
-            step={1}
-            className="w-full"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm text-muted-foreground flex items-center gap-2">
-            <Crop className="h-3 w-3" />
-            Video Cropping
-          </label>
-          <div className="flex gap-2">
-            <Button
-              onClick={toggleCropMode}
-              variant={isCropMode ? "default" : "outline"}
-              size="sm"
-            >
-              <Crop className="h-3 w-3 mr-2" />
-              {isCropMode ? 'Exit Crop' : 'Crop Video'}
-            </Button>
-            
-            {isCropMode && (
-              <>
-                <Button
-                  onClick={applyCrop}
-                  variant="default"
-                  size="sm"
-                >
-                  Apply
-                </Button>
-                <Button
-                  onClick={resetCrop}
-                  variant="outline"
-                  size="sm"
-                  disabled={cropSettings.x === 0 && cropSettings.y === 0 && cropSettings.width === 100 && cropSettings.height === 100}
-                >
-                  Reset
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-
+      {/* Two-column layout for editing controls */}
+      <div className="grid md:grid-cols-2 gap-6 border-t border-border pt-4">
+        {/* Left Column - Display Settings */}
         <div className="space-y-4">
-          <label className="text-sm text-muted-foreground">Background</label>
+          <h3 className="text-sm font-medium flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            Display Settings
+          </h3>
+          
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-muted-foreground flex items-center gap-2">
+                <Maximize className="h-3 w-3" />
+                Video Scale
+              </label>
+              <span className="text-sm font-mono">{100 - videoPadding}%</span>
+            </div>
+            <Slider
+              value={[videoPadding]}
+              onValueChange={(value) => setVideoPadding(value[0])}
+              max={100}
+              min={0}
+              step={1}
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-muted-foreground flex items-center gap-2">
+                <CornerDownLeft className="h-3 w-3" />
+                Corner Rounding
+              </label>
+              <span className="text-sm font-mono">{videoCornerRadius}px</span>
+            </div>
+            <Slider
+              value={[videoCornerRadius]}
+              onValueChange={(value) => setVideoCornerRadius(value[0])}
+              max={20}
+              min={0}
+              step={1}
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm text-muted-foreground flex items-center gap-2">
+              <Crop className="h-3 w-3" />
+              Video Cropping
+            </label>
+            <div className="flex gap-2">
+              <Button
+                onClick={toggleCropMode}
+                variant={isCropMode ? "default" : "outline"}
+                size="sm"
+              >
+                <Crop className="h-3 w-3 mr-2" />
+                {isCropMode ? 'Exit Crop' : 'Crop Video'}
+              </Button>
+              
+              {isCropMode && (
+                <>
+                  <Button
+                    onClick={applyCrop}
+                    variant="default"
+                    size="sm"
+                  >
+                    Apply
+                  </Button>
+                  <Button
+                    onClick={resetCrop}
+                    variant="outline"
+                    size="sm"
+                    disabled={cropSettings.x === 0 && cropSettings.y === 0 && cropSettings.width === 100 && cropSettings.height === 100}
+                  >
+                    Reset
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column - Background Settings */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium flex items-center gap-2">
+            <ImageIcon className="h-4 w-4" />
+            Background Settings
+          </h3>
           
           {/* Background type selector */}
           <div className="flex gap-2 mb-3">
