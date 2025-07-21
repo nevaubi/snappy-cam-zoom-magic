@@ -387,6 +387,23 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
   };
 
+  // Calculate centering transform for cropped video
+  const getCenteringTransform = () => {
+    if (cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0) {
+      return 'none';
+    }
+    
+    // Calculate the offset needed to center the cropped content
+    const centerX = cropSettings.x + (cropSettings.width / 2);
+    const centerY = cropSettings.y + (cropSettings.height / 2);
+    
+    // Calculate how much to translate to center the crop
+    const translateX = (50 - centerX) * (100 / cropSettings.width);
+    const translateY = (50 - centerY) * (100 / cropSettings.height);
+    
+    return `translate(${translateX}%, ${translateY}%)`;
+  };
+
   return (
     <div className={cn("space-y-4", className)}>
       {/* Video Display */}
@@ -402,16 +419,21 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             transform: `scale(${(100 - videoPadding) / 100})`,
           }}
         >
-          <video
-            ref={videoRef}
-            src={src}
-            className="max-w-full max-h-full transition-all duration-300"
+          <div 
+            className="transition-all duration-300 overflow-hidden"
             style={{
               clipPath: getClipPath(),
               borderRadius: `${videoCornerRadius}px`,
+              transform: getCenteringTransform(),
             }}
-            onClick={togglePlay}
-          />
+          >
+            <video
+              ref={videoRef}
+              src={src}
+              className="max-w-full max-h-full"
+              onClick={togglePlay}
+            />
+          </div>
           
           {/* Crop Overlay */}
           {isCropMode && (
