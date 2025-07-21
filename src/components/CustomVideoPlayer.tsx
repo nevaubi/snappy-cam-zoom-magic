@@ -266,16 +266,18 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     <div className={cn("space-y-4", className)}>
       {/* Video Display */}
       <div 
-        className="relative rounded-lg overflow-hidden transition-all duration-300"
+        className="relative rounded-lg overflow-hidden h-96 flex items-center justify-center transition-all duration-300"
         style={{
           backgroundColor: backgroundColor,
-          padding: `${videoPadding}px`,
         }}
       >
         <video
           ref={videoRef}
           src={src}
-          className="w-full h-auto max-h-96 rounded-lg"
+          className="max-w-full max-h-full rounded-lg transition-transform duration-300"
+          style={{
+            transform: `scale(${(100 - videoPadding) / 100})`,
+          }}
           onClick={togglePlay}
         />
       </div>
@@ -311,14 +313,14 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           Display Settings
         </h3>
         
-        {/* Video Padding Slider */}
+        {/* Video Scale Slider */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm text-muted-foreground flex items-center gap-2">
               <Maximize className="h-3 w-3" />
-              Video Padding
+              Video Scale
             </label>
-            <span className="text-sm font-mono">{videoPadding}px</span>
+            <span className="text-sm font-mono">{100 - videoPadding}%</span>
           </div>
           <Slider
             value={[videoPadding]}
