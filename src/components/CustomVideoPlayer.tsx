@@ -140,6 +140,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Trimming functions
   const handleTrimMouseDown = (e: React.MouseEvent, type: 'start' | 'end' | 'scrub') => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(type);
   };
 
