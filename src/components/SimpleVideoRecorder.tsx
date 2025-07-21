@@ -2,12 +2,13 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Play, Square, Download, Settings } from 'lucide-react';
+import { Play, Square, Download, Settings, Upload } from 'lucide-react';
 import { VideoTimeline } from './VideoTimeline';
 import { VideoControls } from './VideoControls';
-import { CustomVideoRenderer, CustomVideoRendererRef } from './CustomVideoRenderer';
+import { SimpleVideoRenderer, SimpleVideoRendererRef } from './SimpleVideoRenderer';
 import { useVideoProcessor } from '@/hooks/useVideoProcessor';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 type QualityPreset = 'standard' | 'high' | 'ultra';
 
@@ -52,6 +53,8 @@ const SimpleVideoRecorder = () => {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string>('');
   const [quality, setQuality] = useState<QualityPreset>('high');
   const [error, setError] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   // Video editing states
   const [videoDuration, setVideoDuration] = useState(0);
@@ -62,11 +65,12 @@ const SimpleVideoRecorder = () => {
   const [splitPoints, setSplitPoints] = useState<number[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
+  const [videoId, setVideoId] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const videoRendererRef = useRef<CustomVideoRendererRef>(null);
+  const videoRendererRef = useRef<SimpleVideoRendererRef>(null);
   
   const { processVideo } = useVideoProcessor();
 
@@ -131,12 +135,13 @@ const SimpleVideoRecorder = () => {
         }
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        setRecordedVideoUrl(url);
         setRecordedVideoBlob(blob);
         setIsRecording(false);
+        
+        // Upload to Supabase immediately after recording
+        await uploadVideoToSupabase(blob);
       };
 
       // Start recording with 1-second intervals for smoother data handling
@@ -157,6 +162,87 @@ const SimpleVideoRecorder = () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+    }
+  };
+
+  const uploadVideoToSupabase = async (blob: Blob) => {
+    try {
+      setIsUploading(true);
+      setUploadProgress(0);
+      
+      const config = QUALITY_PRESETS[quality];
+      const extension = config.mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const filename = `recording-${Date.now()}.${extension}`;
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('recorded-videos')
+        .upload(filename, blob);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('recorded-videos')
+        .getPublicUrl(filename);
+
+      const publicUrl = urlData.publicUrl;
+      
+      // Get video duration
+      const duration = await new Promise<number>((resolve) => {
+        const video = document.createElement('video');
+        video.onloadedmetadata = () => {
+          resolve(video.duration);
+          URL.revokeObjectURL(video.src);
+        };
+        video.src = URL.createObjectURL(blob);
+      });
+
+      // Save metadata to database
+      const { data: dbData, error: dbError } = await supabase
+        .from('recordedvids')
+        .insert([
+          {
+            filename: filename,
+            file_url: publicUrl,
+            file_size: blob.size,
+            duration: duration,
+            quality_preset: quality
+          }
+        ])
+        .select()
+        .single();
+
+      if (dbError) {
+        throw dbError;
+      }
+
+      // Set the stable Supabase URL
+      setRecordedVideoUrl(publicUrl);
+      setVideoId(dbData.id);
+      setUploadProgress(100);
+      
+      toast({
+        title: "Upload successful",
+        description: "Your video has been uploaded and is ready for editing"
+      });
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload video. Using local playback instead.",
+        variant: "destructive"
+      });
+      
+      // Fallback to local blob URL
+      const url = URL.createObjectURL(blob);
+      setRecordedVideoUrl(url);
+      
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -358,8 +444,8 @@ const SimpleVideoRecorder = () => {
             <div className="space-y-4">
               <h3 className="text-sm font-medium">Recorded Video</h3>
               
-              {/* Custom Video Renderer */}
-              <CustomVideoRenderer
+              {/* Simple Video Renderer */}
+              <SimpleVideoRenderer
                 ref={videoRendererRef}
                 videoSrc={recordedVideoUrl}
                 trimStart={trimStart}
@@ -370,6 +456,22 @@ const SimpleVideoRecorder = () => {
                 onLoadedData={handleVideoLoadedData}
                 className="w-full max-h-96"
               />
+              
+              {/* Upload Status */}
+              {isUploading && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Upload className="w-4 h-4 animate-spin" />
+                    Uploading video... {uploadProgress}%
+                  </div>
+                  <div className="w-full bg-secondary rounded-full h-2">
+                    <div 
+                      className="bg-primary h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               
               {/* Video Editing Controls */}
               {videoDuration > 0 && (
