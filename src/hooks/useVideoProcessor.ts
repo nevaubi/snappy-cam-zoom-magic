@@ -37,17 +37,38 @@ export const useVideoProcessor = () => {
         const ffmpeg = new FFmpeg();
         ffmpegInstance = ffmpeg;
 
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        });
+        // Try multiple CDN sources with matching versions
+        const cdnSources = [
+          'https://unpkg.com/@ffmpeg/core@0.12.15/dist/umd',
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.15/dist/umd',
+          'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd', // Fallback
+        ];
+
+        let loaded = false;
+        for (const baseURL of cdnSources) {
+          try {
+            console.log(`Attempting to load FFmpeg from: ${baseURL}`);
+            await ffmpeg.load({
+              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            });
+            loaded = true;
+            console.log(`FFmpeg loaded successfully from: ${baseURL}`);
+            break;
+          } catch (error) {
+            console.warn(`Failed to load from ${baseURL}:`, error);
+            continue;
+          }
+        }
+
+        if (!loaded) {
+          throw new Error('Failed to load FFmpeg from all CDN sources');
+        }
 
         isFFmpegLoaded = true;
-        console.log('FFmpeg loaded successfully');
       } catch (error) {
         console.error('FFmpeg loading failed:', error);
-        throw error;
+        throw new Error(`FFmpeg loading failed: ${error.message}`);
       }
     })();
 
@@ -63,89 +84,72 @@ export const useVideoProcessor = () => {
     if (!ffmpegInstance) throw new Error('FFmpeg not loaded');
     const ffmpeg = ffmpegInstance;
 
+    console.log('Processing video with options:', options);
+
     // Write input video to FFmpeg
     await ffmpeg.writeFile('input.webm', await fetchFile(videoBlob));
 
     // Build FFmpeg command with background composition
     const args: string[] = [];
-    let inputCount = 1;
     
     // Handle background color and video scaling
     if (options.backgroundColor && options.videoPadding !== undefined) {
+      console.log('Applying background and padding');
       // Create colored background
       const backgroundColor = options.backgroundColor.replace('#', '');
       const scale = (100 - options.videoPadding) / 100;
       
+      // Determine duration for background
+      const duration = options.videoDuration || 30;
+      const trimDuration = options.trimEnd && options.trimStart ? 
+        options.trimEnd - options.trimStart : duration;
+      
       // Create a colored background and scale/overlay the video
-      args.push('-f', 'lavfi', '-i', `color=c=${backgroundColor}:size=1920x1080:d=${options.videoDuration || 30}`);
+      args.push('-f', 'lavfi', '-i', `color=c=${backgroundColor}:size=1920x1080:d=${trimDuration}`);
       args.push('-i', 'input.webm');
-      inputCount = 2;
+      
+      // Build filter complex for trimming, scaling, and overlaying
+      let filterComplex = '';
       
       // Trim video first if needed
-      let videoFilter = '[1:v]';
       if (options.trimStart !== undefined && options.trimStart > 0) {
-        const trimDuration = options.trimEnd ? options.trimEnd - options.trimStart : undefined;
-        if (trimDuration) {
-          videoFilter += `trim=start=${options.trimStart}:duration=${trimDuration},setpts=PTS-STARTPTS,`;
-        }
+        const trimEnd = options.trimEnd || duration;
+        const trimDur = trimEnd - options.trimStart;
+        filterComplex += `[1:v]trim=start=${options.trimStart}:duration=${trimDur},setpts=PTS-STARTPTS,`;
+        filterComplex += `scale=iw*${scale}:ih*${scale}[scaled];`;
+        
+        // Audio trimming
+        filterComplex += `[1:a]atrim=start=${options.trimStart}:duration=${trimDur},asetpts=PTS-STARTPTS[audio];`;
+      } else {
+        filterComplex += `[1:v]scale=iw*${scale}:ih*${scale}[scaled];`;
+        filterComplex += `[1:a]acopy[audio];`;
       }
-      
-      // Scale the video
-      videoFilter += `scale=iw*${scale}:ih*${scale}[scaled];`;
       
       // Overlay scaled video on background (centered)
-      const overlayFilter = `[0:v][scaled]overlay=(W-w)/2:(H-h)/2[v]`;
+      filterComplex += `[0:v][scaled]overlay=(W-w)/2:(H-h)/2[v]`;
       
-      args.push('-filter_complex', `${videoFilter}${overlayFilter}`);
+      args.push('-filter_complex', filterComplex);
       args.push('-map', '[v]');
-      
-      // Map audio with trimming if needed
-      if (options.trimStart !== undefined && options.trimStart > 0) {
-        const trimDuration = options.trimEnd ? options.trimEnd - options.trimStart : undefined;
-        if (trimDuration) {
-          args.push('-filter_complex', `[1:a]atrim=start=${options.trimStart}:duration=${trimDuration},asetpts=PTS-STARTPTS[a]`);
-          args.push('-map', '[a]');
-        } else {
-          args.push('-map', '1:a');
-        }
-      } else {
-        args.push('-map', '1:a');
-      }
+      args.push('-map', '[audio]');
     } else {
-      // Fallback to simple processing
+      // Simple processing without background
       args.push('-i', 'input.webm');
       
-      // Video filters for simple case
       const filters: string[] = [];
-      
-      // Crop filter
-      if (options.cropX !== undefined && options.cropY !== undefined && 
-          options.cropWidth !== undefined && options.cropHeight !== undefined) {
-        const cropW = Math.round(1920 * (options.cropWidth / 100));
-        const cropH = Math.round(1080 * (options.cropHeight / 100));
-        const cropX = Math.round(1920 * (options.cropX / 100));
-        const cropY = Math.round(1080 * (options.cropY / 100));
-        filters.push(`crop=${cropW}:${cropH}:${cropX}:${cropY}`);
-      }
-      
-      // Zoom filter (scale)
-      if (options.zoom && options.zoom !== 1) {
-        const scale = Math.round(1920 * options.zoom);
-        filters.push(`scale=${scale}:${Math.round(scale * 9/16)}`);
-      }
-      
-      if (filters.length > 0) {
-        args.push('-vf', filters.join(','));
-      }
       
       // Trim video
       if (options.trimStart !== undefined && options.trimStart > 0) {
-        args.push('-ss', `${options.trimStart}s`);
+        args.push('-ss', `${options.trimStart}`);
       }
       
-      if (options.trimEnd !== undefined && options.videoDuration) {
-        const trimDuration = options.trimEnd - (options.trimStart || 0);
-        args.push('-t', `${trimDuration}s`);
+      if (options.trimEnd !== undefined && options.trimStart !== undefined) {
+        const trimDuration = options.trimEnd - options.trimStart;
+        args.push('-t', `${trimDuration}`);
+      }
+      
+      // Apply video filters if any
+      if (filters.length > 0) {
+        args.push('-vf', filters.join(','));
       }
     }
     
@@ -161,9 +165,12 @@ export const useVideoProcessor = () => {
     
     args.push('-c:v', 'libvpx-vp9', '-c:a', 'libopus', 'output.webm');
 
+    console.log('FFmpeg command:', args.join(' '));
+
     // Set up progress monitoring
     if (onProgress) {
       ffmpeg.on('progress', (event) => {
+        console.log('FFmpeg progress:', event.progress);
         onProgress(event.progress * 100);
       });
     }
@@ -176,8 +183,9 @@ export const useVideoProcessor = () => {
     
     // Clean up
     await ffmpeg.deleteFile('input.webm');
-    await ffmpeg.deleteFile('output.webm');
+    await ffmpeg.deleteFile('output.webv');
     
+    console.log('Video processing completed');
     return new Blob([data], { type: 'video/webm' });
   }, [loadFFmpeg]);
 

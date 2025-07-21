@@ -90,7 +90,8 @@ const SimpleVideoRecorder = () => {
           width: { ideal: config.resolution.width },
           height: { ideal: config.resolution.height },
           frameRate: { ideal: config.frameRate },
-          displaySurface: 'monitor'
+          displaySurface: 'monitor',
+          cursor: 'always'
         } as any,
         audio: {
           sampleRate: 48000,

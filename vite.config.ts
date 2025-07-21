@@ -1,3 +1,4 @@
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
@@ -8,6 +9,10 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    },
   },
   plugins: [
     react(),
@@ -17,6 +22,19 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  optimizeDeps: {
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
+  build: {
+    target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          ffmpeg: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+        },
+      },
     },
   },
 }));

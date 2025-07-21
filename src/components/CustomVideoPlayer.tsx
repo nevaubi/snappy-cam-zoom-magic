@@ -274,12 +274,18 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const exportVideo = async () => {
     if (!originalVideoBlob) {
       console.error('No original video blob available for export');
+      alert('No original video available for export. Please record a new video.');
       return;
     }
 
     try {
       setIsExporting(true);
       setExportProgress(0);
+
+      // Pre-load FFmpeg to show loading state
+      console.log('Pre-loading FFmpeg...');
+      await processVideo.loadFFmpeg?.();
+      console.log('FFmpeg loaded, starting export...');
 
       const options = {
         trimStart: trimStart,
@@ -295,7 +301,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       const processedBlob = await processVideo(
         originalVideoBlob,
         options,
-        (progress) => setExportProgress(progress)
+        (progress) => {
+          console.log('Export progress:', progress);
+          setExportProgress(progress);
+        }
       );
 
       // Download the processed video
@@ -309,8 +318,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       URL.revokeObjectURL(url);
 
       console.log('Video export completed successfully');
+      alert('Video exported successfully!');
     } catch (error) {
       console.error('Error exporting video:', error);
+      alert(`Export failed: ${error.message}`);
     } finally {
       setIsExporting(false);
       setExportProgress(0);
