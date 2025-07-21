@@ -3,6 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Play, Square, Download, Settings } from 'lucide-react';
+import { VideoTimeline } from './VideoTimeline';
+import { VideoControls } from './VideoControls';
+import { useVideoProcessor } from '@/hooks/useVideoProcessor';
+import { toast } from '@/hooks/use-toast';
 
 type QualityPreset = 'standard' | 'high' | 'ultra';
 
@@ -47,10 +51,23 @@ const SimpleVideoRecorder = () => {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string>('');
   const [quality, setQuality] = useState<QualityPreset>('high');
   const [error, setError] = useState<string>('');
+  
+  // Video editing states
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [splitPoints, setSplitPoints] = useState<number[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
+  const { processVideo } = useVideoProcessor();
 
   const getSupportedMimeType = (preferredType: string): string => {
     const fallbacks = [
@@ -117,6 +134,7 @@ const SimpleVideoRecorder = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
         const url = URL.createObjectURL(blob);
         setRecordedVideoUrl(url);
+        setRecordedVideoBlob(blob);
         setIsRecording(false);
       };
 
@@ -155,6 +173,99 @@ const SimpleVideoRecorder = () => {
       document.body.removeChild(a);
     }
   };
+
+  // Video editing functions
+  const handleVideoLoad = () => {
+    if (videoRef.current) {
+      const duration = videoRef.current.duration;
+      setVideoDuration(duration);
+      setTrimStart(0);
+      setTrimEnd(duration);
+      setSplitPoints([]);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleSeek = (time: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  const handleGoToStart = () => {
+    handleSeek(0);
+  };
+
+  const handleTrimChange = (start: number, end: number) => {
+    setTrimStart(start);
+    setTrimEnd(end);
+  };
+
+  const handleSplit = (time: number) => {
+    if (!splitPoints.includes(time)) {
+      setSplitPoints([...splitPoints, time].sort((a, b) => a - b));
+      toast({
+        title: "Split added",
+        description: `Video will be split at ${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`
+      });
+    }
+  };
+
+  const handleExport = async () => {
+    if (!recordedVideoBlob) return;
+    
+    setIsExporting(true);
+    try {
+      const processedBlob = await processVideo(recordedVideoBlob, {
+        trimStart: trimStart,
+        trimEnd: trimEnd
+      });
+      
+      const url = URL.createObjectURL(processedBlob);
+      const config = QUALITY_PRESETS[quality];
+      const extension = config.mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const filename = `edited-recording-${quality}-${new Date().toISOString().slice(0, 19)}.${extension}`;
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      toast({
+        title: "Export complete",
+        description: "Your edited video has been downloaded"
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "There was an error processing your video",
+        variant: "destructive"
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const hasEdits = trimStart > 0 || trimEnd < videoDuration || splitPoints.length > 0;
 
   const currentConfig = QUALITY_PRESETS[quality];
   const estimatedSizeMB = Math.round((currentConfig.videoBitsPerSecond + currentConfig.audioBitsPerSecond) / 8 / 1024 / 1024 * 60); // Per minute
@@ -229,13 +340,54 @@ const SimpleVideoRecorder = () => {
 
           {/* Recorded Video Playback */}
           {recordedVideoUrl && (
-            <div className="space-y-2">
+            <div className="space-y-4">
               <h3 className="text-sm font-medium">Recorded Video</h3>
               <video
+                ref={videoRef}
                 src={recordedVideoUrl}
-                controls
                 className="w-full max-h-96 bg-muted rounded-lg"
+                onLoadedMetadata={handleVideoLoad}
+                onTimeUpdate={handleTimeUpdate}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
               />
+              
+              {/* Video Editing Controls */}
+              {videoDuration > 0 && (
+                <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-sm font-medium">Video Editor</h4>
+                    <VideoControls
+                      isPlaying={isPlaying}
+                      onPlayPause={handlePlayPause}
+                      onGoToStart={handleGoToStart}
+                      onExport={handleExport}
+                      isExporting={isExporting}
+                      hasEdits={hasEdits}
+                    />
+                  </div>
+                  
+                  <VideoTimeline
+                    videoRef={videoRef}
+                    duration={videoDuration}
+                    currentTime={currentTime}
+                    onSeek={handleSeek}
+                    onTrimChange={handleTrimChange}
+                    onSplit={handleSplit}
+                    trimStart={trimStart}
+                    trimEnd={trimEnd}
+                    splitPoints={splitPoints}
+                  />
+                  
+                  {splitPoints.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Split points: {splitPoints.map(time => 
+                        `${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`
+                      ).join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
