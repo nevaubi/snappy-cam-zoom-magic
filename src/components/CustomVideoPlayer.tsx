@@ -386,13 +386,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           style={{
             transform: `scale(${(100 - videoPadding) / 100})`,
             borderRadius: `${videoCornerRadius}px`,
-            objectFit: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 ? 'contain' : 'none',
-            objectPosition: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 ? 'center' : 
-              `${-cropSettings.x * (100 / cropSettings.width)}% ${-cropSettings.y * (100 / cropSettings.height)}%`,
-            width: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 ? 'auto' : 
-              `${100 / cropSettings.width * 100}%`,
-            height: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 ? 'auto' : 
-              `${100 / cropSettings.height * 100}%`,
+            objectFit: 'contain',
+            clipPath: cropSettings.width === 100 && cropSettings.height === 100 && cropSettings.x === 0 && cropSettings.y === 0 
+              ? 'none' 
+              : `inset(${cropSettings.y}% ${100 - cropSettings.x - cropSettings.width}% ${100 - cropSettings.y - cropSettings.height}% ${cropSettings.x}%)`
           }}
           onClick={togglePlay}
         />
@@ -401,66 +398,88 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         {isCropMode && (
           <div 
             ref={cropOverlayRef}
-            className="absolute inset-0 cursor-crosshair"
+            className="absolute inset-0"
           >
             {/* Dark overlay outside crop area */}
-            <div className="absolute inset-0 bg-black/50" />
+            <div className="absolute inset-0 bg-black/60" />
             
             {/* Crop area */}
             <div 
-              className="absolute border-2 border-white bg-transparent"
+              className="absolute border-2 border-white shadow-lg"
               style={{
                 left: `${cropSettings.x}%`,
                 top: `${cropSettings.y}%`,
                 width: `${cropSettings.width}%`,
                 height: `${cropSettings.height}%`,
+                backgroundColor: 'transparent',
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6)'
               }}
-              onMouseDown={(e) => handleCropMouseDown(e, 'move')}
             >
+              {/* Grid lines for rule of thirds */}
+              <div className="absolute inset-0">
+                {/* Vertical lines */}
+                <div className="absolute left-1/3 top-0 w-px h-full bg-white/30" />
+                <div className="absolute left-2/3 top-0 w-px h-full bg-white/30" />
+                {/* Horizontal lines */}
+                <div className="absolute top-1/3 left-0 w-full h-px bg-white/30" />
+                <div className="absolute top-2/3 left-0 w-full h-px bg-white/30" />
+              </div>
+              
+              {/* Move handle - center area */}
+              <div 
+                className="absolute inset-2 cursor-move hover:bg-white/10 transition-colors"
+                onMouseDown={(e) => handleCropMouseDown(e, 'move')}
+              />
+              
               {/* Corner handles */}
               <div 
-                className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-gray-400 cursor-nw-resize"
+                className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-blue-500 rounded cursor-nw-resize hover:bg-blue-50 transition-colors"
                 onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
               />
               <div 
-                className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-gray-400 cursor-ne-resize"
+                className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-blue-500 rounded cursor-ne-resize hover:bg-blue-50 transition-colors"
                 onMouseDown={(e) => handleCropMouseDown(e, 'ne')}
               />
               <div 
-                className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-gray-400 cursor-sw-resize"
+                className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-blue-500 rounded cursor-sw-resize hover:bg-blue-50 transition-colors"
                 onMouseDown={(e) => handleCropMouseDown(e, 'sw')}
               />
               <div 
-                className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-gray-400 cursor-se-resize"
+                className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-blue-500 rounded cursor-se-resize hover:bg-blue-50 transition-colors"
                 onMouseDown={(e) => handleCropMouseDown(e, 'se')}
               />
               
               {/* Edge handles */}
               <div 
-                className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border border-gray-400 cursor-n-resize"
+                className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-blue-500 rounded cursor-n-resize hover:bg-blue-50 transition-colors"
                 onMouseDown={(e) => handleCropMouseDown(e, 'n')}
               />
               <div 
-                className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border border-gray-400 cursor-s-resize"
+                className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-blue-500 rounded cursor-s-resize hover:bg-blue-50 transition-colors"
                 onMouseDown={(e) => handleCropMouseDown(e, 's')}
               />
               <div 
-                className="absolute -left-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border border-gray-400 cursor-w-resize"
+                className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-blue-500 rounded cursor-w-resize hover:bg-blue-50 transition-colors"
                 onMouseDown={(e) => handleCropMouseDown(e, 'w')}
               />
               <div 
-                className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border border-gray-400 cursor-e-resize"
+                className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-blue-500 rounded cursor-e-resize hover:bg-blue-50 transition-colors"
                 onMouseDown={(e) => handleCropMouseDown(e, 'e')}
               />
             </div>
             
+            {/* Crop dimensions display */}
+            <div className="absolute top-4 left-4 bg-black/80 text-white px-2 py-1 rounded text-sm font-mono">
+              {Math.round(cropSettings.width)}% × {Math.round(cropSettings.height)}%
+            </div>
+            
             {/* Crop control buttons */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-              <Button onClick={applyCrop} size="sm" className="bg-green-600 hover:bg-green-700">
+              <Button onClick={applyCrop} size="sm" className="bg-green-600 hover:bg-green-700 text-white">
                 <Check className="h-4 w-4 mr-2" />
                 Apply Crop
               </Button>
-              <Button onClick={cancelCrop} size="sm" variant="outline">
+              <Button onClick={cancelCrop} size="sm" variant="outline" className="bg-white text-black hover:bg-gray-100">
                 <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
