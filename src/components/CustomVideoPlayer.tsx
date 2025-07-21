@@ -506,38 +506,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     );
 
     if (activeZoom) {
-      // Calculate smooth zoom progression based on position within the effect
-      const effectDuration = activeZoom.endTime - activeZoom.startTime;
-      const progressInEffect = (currentTime - activeZoom.startTime) / effectDuration;
-      
-      // Use zoomSpeed to control phase durations
-      const speedFactor = activeZoom.zoomSpeed || 0.15;
-      const zoomInPhase = Math.min(0.3, speedFactor * 2); // Faster speed = shorter transition
-      const zoomOutPhase = 1 - zoomInPhase;
-      
-      // Unified easing function for consistent motion
-      const easeInOutCubic = (t: number) => {
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-      };
-      
-      let smoothZoom = 1;
-      
-      if (progressInEffect <= zoomInPhase) {
-        // Zoom-in phase with cubic easing
-        const zoomProgress = progressInEffect / zoomInPhase;
-        const easedProgress = easeInOutCubic(zoomProgress);
-        smoothZoom = 1 + (activeZoom.zoomAmount - 1) * easedProgress;
-      } else if (progressInEffect >= zoomOutPhase) {
-        // Zoom-out phase - exact reverse of zoom-in motion path
-        const zoomOutProgress = (progressInEffect - zoomOutPhase) / (1 - zoomOutPhase);
-        const easedProgress = easeInOutCubic(1 - zoomOutProgress); // Reverse the easing
-        smoothZoom = 1 + (activeZoom.zoomAmount - 1) * easedProgress;
-      } else {
-        // Hold at full zoom
-        smoothZoom = activeZoom.zoomAmount;
-      }
-      
-      setCurrentZoom(smoothZoom);
+      // Simple binary zoom state - let CSS handle smooth transitions
+      setCurrentZoom(activeZoom.zoomAmount);
       setCurrentZoomTarget({ 
         x: activeZoom.targetX + 0.5, 
         y: activeZoom.targetY + 0.5 
@@ -611,9 +581,9 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                     clipPath: getClipPath(),
                     transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
                     transformOrigin: `${(currentZoomTarget.x / 7) * 100}% ${(currentZoomTarget.y / 7) * 100}%`,
-                    transition: zoomEffects.find(zoom => 
+                    transition: `transform ${zoomEffects.find(zoom => 
                       currentTime >= zoom.startTime && currentTime <= zoom.endTime
-                    ) ? 'none' : 'transform 0.15s ease-out',
+                    )?.zoomSpeed || 0.15}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
                   }}
                   onClick={togglePlay}
                 />
