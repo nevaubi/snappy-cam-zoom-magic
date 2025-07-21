@@ -22,7 +22,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
   return (
     <div className="flex items-center gap-3">
       <Button
-        variant="outline"
+        variant="secondary"
         size="sm"
         onClick={onPlayPause}
         className="flex items-center gap-2"
@@ -41,7 +41,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
       </Button>
 
       <Button
-        variant="outline"
+        variant="secondary"
         size="sm"
         onClick={onGoToStart}
         className="flex items-center gap-2"

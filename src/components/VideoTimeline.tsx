@@ -60,9 +60,7 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
   };
 
   const formatTime = (time: number): string => {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${time.toFixed(1)}s`;
   };
 
   // Handle mouse events for dragging
@@ -114,7 +112,7 @@ export const VideoTimeline: React.FC<VideoTimelineProps> = ({
   return (
     <div className="space-y-2">
       <div className="flex justify-between text-xs text-muted-foreground">
-        <span>0:00</span>
+        <span>0s</span>
         <span>{formatTime(duration)}</span>
       </div>
       

@@ -178,10 +178,12 @@ const SimpleVideoRecorder = () => {
   const handleVideoLoad = () => {
     if (videoRef.current) {
       const duration = videoRef.current.duration;
-      setVideoDuration(duration);
-      setTrimStart(0);
-      setTrimEnd(duration);
-      setSplitPoints([]);
+      if (duration && !isNaN(duration) && isFinite(duration)) {
+        setVideoDuration(duration);
+        setTrimStart(0);
+        setTrimEnd(duration);
+        setSplitPoints([]);
+      }
     }
   };
 
