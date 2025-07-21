@@ -63,6 +63,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [currentZoom, setCurrentZoom] = useState(1); // Current zoom level applied to video
   const [currentZoomTarget, setCurrentZoomTarget] = useState({ x: 3.5, y: 3.5 }); // Center by default
   
+  // Store last active zoom properties for smooth zoom-out
+  const [lastZoomSpeed, setLastZoomSpeed] = useState(0.15);
+  const [lastZoomTarget, setLastZoomTarget] = useState({ x: 3.5, y: 3.5 });
+  
   // Background color presets
   const colorPresets = [
     { name: 'Black', value: '#000000' },
@@ -506,6 +510,13 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     );
 
     if (activeZoom) {
+      // Store zoom properties for consistent zoom-out
+      setLastZoomSpeed(activeZoom.zoomSpeed || 0.15);
+      setLastZoomTarget({ 
+        x: activeZoom.targetX + 0.5, 
+        y: activeZoom.targetY + 0.5 
+      });
+      
       // Simple binary zoom state - let CSS handle smooth transitions
       setCurrentZoom(activeZoom.zoomAmount);
       setCurrentZoomTarget({ 
@@ -513,10 +524,15 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         y: activeZoom.targetY + 0.5 
       });
     } else {
+      // Use stored values for zoom-out, then reset to center after animation
       setCurrentZoom(1);
-      setCurrentZoomTarget({ x: 3.5, y: 3.5 });
+      
+      // Keep last zoom target during zoom-out for consistent animation
+      setTimeout(() => {
+        setCurrentZoomTarget({ x: 3.5, y: 3.5 });
+      }, lastZoomSpeed * 1000);
     }
-  }, [currentTime, zoomEffects]);
+  }, [currentTime, zoomEffects, lastZoomSpeed]);
 
   // Zoom presets data
   const zoomAmounts = [
@@ -583,7 +599,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                     transformOrigin: `${(currentZoomTarget.x / 7) * 100}% ${(currentZoomTarget.y / 7) * 100}%`,
                     transition: `transform ${zoomEffects.find(zoom => 
                       currentTime >= zoom.startTime && currentTime <= zoom.endTime
-                    )?.zoomSpeed || 0.15}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
+                    )?.zoomSpeed || lastZoomSpeed}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`,
                   }}
                   onClick={togglePlay}
                 />
