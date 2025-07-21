@@ -574,6 +574,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                 <video
                   ref={videoRef}
                   src={src}
+                  crossOrigin="anonymous"
                   className="max-w-full max-h-full transition-all duration-300"
                   style={{
                     clipPath: getClipPath(),

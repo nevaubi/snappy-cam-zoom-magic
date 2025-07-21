@@ -29,23 +29,28 @@ export const ZoomGridSelector: React.FC<ZoomGridSelectorProps> = ({
     const captureFrame = () => {
       if (video.videoWidth === 0 || video.videoHeight === 0) return;
       
-      // Set canvas size to match video aspect ratio but smaller
-      const aspectRatio = video.videoWidth / video.videoHeight;
-      const maxSize = 160;
-      
-      if (aspectRatio > 1) {
-        canvas.width = maxSize;
-        canvas.height = maxSize / aspectRatio;
-      } else {
-        canvas.width = maxSize * aspectRatio;
-        canvas.height = maxSize;
+      try {
+        // Set canvas size to match video aspect ratio but smaller
+        const aspectRatio = video.videoWidth / video.videoHeight;
+        const maxSize = 160;
+        
+        if (aspectRatio > 1) {
+          canvas.width = maxSize;
+          canvas.height = maxSize / aspectRatio;
+        } else {
+          canvas.width = maxSize * aspectRatio;
+          canvas.height = maxSize;
+        }
+        
+        // Draw current video frame
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Convert to data URL for display
+        setThumbnail(canvas.toDataURL());
+      } catch (error) {
+        console.warn('Canvas operation failed, using fallback grid:', error);
+        setThumbnail(null);
       }
-      
-      // Draw current video frame
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert to data URL for display
-      setThumbnail(canvas.toDataURL());
     };
 
     // Capture frame when video metadata is loaded or time updates
@@ -84,13 +89,17 @@ export const ZoomGridSelector: React.FC<ZoomGridSelectorProps> = ({
     <div className="space-y-3">
       <h4 className="text-sm font-medium text-foreground">Zoom Target</h4>
       <div className="relative w-40 h-auto mx-auto">
-        {/* Video thumbnail background */}
-        {thumbnail && (
+        {/* Video thumbnail background or fallback */}
+        {thumbnail ? (
           <img 
             src={thumbnail} 
             alt="Video thumbnail"
             className="w-full h-auto rounded border"
           />
+        ) : (
+          <div className="w-full aspect-video bg-muted rounded border flex items-center justify-center">
+            <span className="text-muted-foreground text-xs">Grid Selector</span>
+          </div>
         )}
         
         {/* Grid overlay */}
