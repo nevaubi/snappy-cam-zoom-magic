@@ -52,34 +52,87 @@ export const useVideoProcessor = () => {
         const ffmpeg = new FFmpeg();
         ffmpegInstance = ffmpeg;
 
-        // Multiple CDN fallbacks with correct version
-        const cdnUrls = [
-          'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd',
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd',
-          'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg.js/0.12.10/umd'
+        // Try self-hosted files first
+        try {
+          console.log('Attempting to load from self-hosted files...');
+          const baseURL = '/ffmpeg';
+          
+          await ffmpeg.load({
+            coreURL: `${baseURL}/ffmpeg-core.js`,
+            wasmURL: `${baseURL}/ffmpeg-core.wasm`,
+            workerURL: `${baseURL}/ffmpeg-core.worker.js`,
+          });
+          
+          isFFmpegLoaded = true;
+          console.log('FFmpeg loaded successfully from self-hosted files');
+          return;
+        } catch (selfHostedError) {
+          console.warn('Self-hosted FFmpeg files not available, trying CDN fallbacks...');
+        }
+
+        // CDN fallbacks with correct version and paths
+        const cdnConfigs = [
+          {
+            name: 'UNPKG ESM',
+            coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js',
+            wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.wasm',
+            workerURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.worker.js'
+          },
+          {
+            name: 'jsDelivr ESM',
+            coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js',
+            wasmURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.wasm',
+            workerURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.worker.js'
+          },
+          {
+            name: 'UNPKG UMD',
+            baseURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd'
+          }
         ];
 
         let lastError: Error | null = null;
         
-        for (const baseURL of cdnUrls) {
+        for (const config of cdnConfigs) {
           try {
-            console.log(`Trying to load FFmpeg from: ${baseURL}`);
-            await ffmpeg.load({
-              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-            });
+            console.log(`Trying to load FFmpeg from: ${config.name}`);
+            
+            if (config.baseURL) {
+              // UMD version with toBlobURL
+              await ffmpeg.load({
+                coreURL: await toBlobURL(`${config.baseURL}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await toBlobURL(`${config.baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+              });
+            } else {
+              // ESM version with direct URLs
+              await ffmpeg.load({
+                coreURL: config.coreURL!,
+                wasmURL: config.wasmURL!,
+                workerURL: config.workerURL!,
+              });
+            }
             
             isFFmpegLoaded = true;
-            console.log('FFmpeg loaded successfully from:', baseURL);
+            console.log('FFmpeg loaded successfully from:', config.name);
             return;
           } catch (error) {
-            console.warn(`Failed to load from ${baseURL}:`, error);
+            console.warn(`Failed to load from ${config.name}:`, error);
             lastError = error as Error;
             continue;
           }
         }
 
-        throw new Error(`Failed to load FFmpeg from all CDN sources. Last error: ${lastError?.message}`);
+        // All loading attempts failed
+        ffmpegInstance = null;
+        isFFmpegLoaded = false;
+        loadingPromise = null;
+        
+        const errorMessage = lastError?.message?.includes('CORS') 
+          ? 'Unable to load video processing library due to network restrictions. Please refresh the page or try a different browser.'
+          : lastError?.message?.includes('404') || lastError?.message?.includes('Failed to fetch')
+          ? 'Video processing library temporarily unavailable. Please try again later.'
+          : 'Unable to load video processing library. Please refresh the page or try a different browser.';
+          
+        throw new Error(errorMessage);
       } catch (error) {
         console.error('FFmpeg loading failed completely:', error);
         ffmpegInstance = null;
