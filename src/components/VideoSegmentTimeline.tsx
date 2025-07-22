@@ -45,13 +45,18 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
     return percentage * duration;
   };
 
-  const handleContextMenu = (e: React.MouseEvent, segmentId: string) => {
+  const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect) return;
     
     const x = e.clientX - rect.left;
     const time = getTimeFromPosition(x);
+    
+    // Find which segment this time falls into
+    const segmentId = segments.find(s => time >= s.startTime && time <= s.endTime)?.id || segments[0]?.id;
+    
+    console.log('Right-click at time:', time, 'in segment:', segmentId);
     
     setContextMenu({
       x: e.clientX,
@@ -84,7 +89,7 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
       const segment = segments.find(s => s.id === isDragging.segmentId);
       if (!segment) return;
 
-      const minDuration = 0.5; // Minimum 0.5 second segment
+      const minDuration = 0.1; // Minimum 0.1 second segment
       const updatedSegments = segments.map(s => {
         if (s.id !== isDragging.segmentId) return s;
 
@@ -160,6 +165,7 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
           <div 
             ref={timelineRef}
             className="relative w-full h-12 bg-muted rounded-lg cursor-pointer select-none"
+            onContextMenu={handleContextMenu}
           >
             {/* Background track */}
             <div className="absolute inset-0 bg-muted-foreground/20 rounded-lg" />
@@ -183,7 +189,6 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
                     width: `${((segment.endTime - segment.startTime) / duration) * 100}%`,
                   }}
                   onMouseDown={(e) => handleMouseDown(e, 'move', segment.id)}
-                  onContextMenu={(e) => handleContextMenu(e, segment.id)}
                 >
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-xs font-medium text-primary-foreground bg-primary/50 px-1 rounded">
