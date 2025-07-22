@@ -2,13 +2,16 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
+import { VideoExporter, ExportSettings, ExportProgress } from '@/utils/VideoExporter';
+import { ExportProgressModal } from './ExportProgressModal';
+import { useToast } from '@/hooks/use-toast';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -70,6 +73,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Track processed zoom effects to prevent duplicate updates
   const lastProcessedZoomRef = useRef<string | null>(null);
   const zoomOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Export states
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgress>({
+    phase: 'initializing',
+    progress: 0,
+    message: ''
+  });
+  const [exportedBlob, setExportedBlob] = useState<Blob | null>(null);
+  const videoExporterRef = useRef<VideoExporter | null>(null);
+  const { toast } = useToast();
   
   // Background color presets
   const colorPresets = [
@@ -599,6 +613,112 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
+  // Export functionality
+  const handleExportVideo = async () => {
+    if (isExporting) return;
+    
+    try {
+      setIsExporting(true);
+      setExportedBlob(null);
+      
+      // Create exporter instance
+      videoExporterRef.current = new VideoExporter();
+      
+      // Prepare export settings
+      const exportSettings: ExportSettings = {
+        videoSrc: src,
+        trimStart,
+        trimEnd,
+        cropSettings: appliedCropSettings,
+        backgroundColor,
+        backgroundType,
+        backgroundImage,
+        backgroundImageFit,
+        videoPadding,
+        videoCornerRadius,
+        zoomEffects
+      };
+      
+      // Start export
+      const exportedVideo = await videoExporterRef.current.exportVideo(
+        exportSettings,
+        setExportProgress
+      );
+      
+      setExportedBlob(exportedVideo);
+      toast({
+        title: "Export Successful",
+        description: "Video exported successfully!",
+      });
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      if (error instanceof Error && error.message !== 'Export cancelled by user') {
+        toast({
+          title: "Export Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleCancelExport = () => {
+    if (videoExporterRef.current && isExporting) {
+      videoExporterRef.current.cancel();
+      setIsExporting(false);
+      setExportProgress({
+        phase: 'error',
+        progress: 0,
+        message: 'Export cancelled'
+      });
+      toast({
+        title: "Export Cancelled",
+        description: "Export was cancelled by user",
+      });
+    }
+  };
+
+  const handleDownloadExported = () => {
+    if (!exportedBlob) return;
+    
+    const url = URL.createObjectURL(exportedBlob);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `video-export-${timestamp}-1440p.webm`;
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Download Complete",
+      description: `Downloaded: ${filename}`,
+    });
+  };
+
+  const closeExportModal = () => {
+    setIsExporting(false);
+    setExportedBlob(null);
+    setExportProgress({
+      phase: 'initializing',
+      progress: 0,
+      message: ''
+    });
+  };
+
+  // Cleanup export resources on unmount
+  useEffect(() => {
+    return () => {
+      if (videoExporterRef.current) {
+        videoExporterRef.current.cancel();
+      }
+    };
+  }, []);
+
   return (
     <div className={cn("space-y-6", className)}>
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
@@ -606,6 +726,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         {/* Left Column - Video Player (75%) */}
         <div className="lg:col-span-3">
           <div 
+            data-export-container
             className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
             style={{
               ...(backgroundType === 'color' 
@@ -1087,6 +1208,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
         </Button>
+
+        <Button
+          onClick={handleExportVideo}
+          variant="default"
+          size="sm"
+          disabled={isExporting || !duration}
+          className="ml-auto"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          {isExporting ? 'Exporting...' : 'Export Video'}
+        </Button>
       </div>
 
       {duration > 0 && (
@@ -1177,6 +1309,15 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           )}
         </div>
       )}
+
+      {/* Export Progress Modal */}
+      <ExportProgressModal
+        isOpen={isExporting}
+        progress={exportProgress}
+        onCancel={handleCancelExport}
+        onDownload={handleDownloadExported}
+        exportedBlob={exportedBlob}
+      />
     </div>
   );
 };
