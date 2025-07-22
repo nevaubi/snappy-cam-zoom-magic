@@ -633,7 +633,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   className="relative overflow-hidden"
                   style={{
                     borderRadius: `${videoCornerRadius}px`,
-                    width: videoRef.current ? `${videoRef.current.videoWidth * (cropSettings.height / 100)}px` : '100%',
+                    width: videoRef.current ? `${videoRef.current.videoWidth * (cropSettings.width / 100)}px` : '100%',
                     height: videoRef.current ? `${videoRef.current.videoHeight * (cropSettings.height / 100)}px` : '100%',
                     maxWidth: '100%',
                     maxHeight: '100%',
