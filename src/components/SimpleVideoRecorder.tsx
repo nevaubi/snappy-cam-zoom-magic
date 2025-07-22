@@ -468,7 +468,6 @@ const SimpleVideoRecorder = () => {
               </div>
               <div className={isExportMode ? 'flex justify-center' : ''}>
                 <CustomVideoPlayer 
-                  ref={videoRef}
                   src={supabaseVideoUrl} 
                   className={isExportMode ? 'max-w-4xl mx-auto' : 'w-full'} 
                 />
