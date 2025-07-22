@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { X, Split } from 'lucide-react';
+import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu';
 
 export interface VideoSegment {
   id: string;
@@ -30,7 +29,7 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
 }) => {
   const timelineRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState<{ type: 'start' | 'end' | 'move'; segmentId: string } | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; segmentId: string; time: number } | null>(null);
+  
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -45,37 +44,9 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
     return percentage * duration;
   };
 
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const rect = timelineRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    
-    const x = e.clientX - rect.left;
-    const time = getTimeFromPosition(x);
-    
-    // Find which segment this time falls into
-    const segmentId = segments.find(s => time >= s.startTime && time <= s.endTime)?.id || segments[0]?.id;
-    
-    console.log('Right-click at time:', time, 'in segment:', segmentId);
-    
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      segmentId,
-      time
-    });
-  };
-
-  const handleSplit = () => {
-    if (contextMenu) {
-      onSegmentSplit(contextMenu.segmentId, contextMenu.time);
-      setContextMenu(null);
-    }
-  };
 
   const handleDelete = (segmentId: string) => {
     onSegmentDelete(segmentId);
-    setContextMenu(null);
   };
 
   useEffect(() => {
@@ -124,21 +95,18 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
       setIsDragging(null);
     };
 
-    const handleClickOutside = () => {
-      setContextMenu(null);
-    };
 
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
 
-    document.addEventListener('click', handleClickOutside);
+    
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('click', handleClickOutside);
+      
     };
   }, [isDragging, segments, duration, onSegmentsUpdate]);
 
@@ -160,13 +128,10 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
         </span>
       </div>
       
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div 
-            ref={timelineRef}
-            className="relative w-full h-12 bg-muted rounded-lg cursor-pointer select-none"
-            onContextMenu={handleContextMenu}
-          >
+      <div 
+        ref={timelineRef}
+        className="relative w-full h-12 bg-muted rounded-lg cursor-pointer select-none"
+      >
             {/* Background track */}
             <div className="absolute inset-0 bg-muted-foreground/20 rounded-lg" />
             
@@ -241,16 +206,7 @@ export const VideoSegmentTimeline: React.FC<VideoSegmentTimelineProps> = ({
                 )}
               </div>
             ))}
-          </div>
-        </ContextMenuTrigger>
-        
-        <ContextMenuContent>
-          <ContextMenuItem onClick={handleSplit}>
-            <Split className="h-4 w-4 mr-2" />
-            Split at {contextMenu ? formatTime(contextMenu.time) : ''}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+        </div>
       
       {/* Segment details */}
       <div className="space-y-1">

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Split } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
@@ -341,7 +341,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       return;
     }
 
-    const minDuration = 0.5; // Minimum 0.5 second duration
+    const minDuration = 0.1; // Minimum 0.1 second duration
     
     // Ensure both resulting segments meet minimum duration
     if (splitTime - segmentToSplit.startTime < minDuration || segmentToSplit.endTime - splitTime < minDuration) {
@@ -368,6 +368,20 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     });
 
     setVideoSegments(newSegments);
+  };
+
+  const handleSplitAtCurrentTime = () => {
+    const splitTime = currentTime;
+    
+    // Find which segment this time falls into
+    const segmentToSplit = videoSegments.find(s => splitTime >= s.startTime && splitTime < s.endTime);
+    if (!segmentToSplit) {
+      console.log('No segment found for split time:', splitTime);
+      return;
+    }
+    
+    console.log('Splitting segment', segmentToSplit.id, 'at time:', splitTime);
+    handleSegmentSplit(segmentToSplit.id, splitTime);
   };
 
   const handleSegmentDelete = (segmentId: string) => {
@@ -1147,6 +1161,16 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         >
           <Pause className="h-4 w-4 mr-2" />
           Pause
+        </Button>
+
+        <Button
+          onClick={handleSplitAtCurrentTime}
+          variant="outline"
+          size="sm"
+          disabled={!duration || videoSegments.length === 0}
+        >
+          <Split className="h-4 w-4 mr-2" />
+          Split
         </Button>
         
         <span className="text-sm text-muted-foreground">
