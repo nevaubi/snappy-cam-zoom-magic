@@ -11,6 +11,8 @@ export interface VideoProcessingOptions {
   trimStart?: number;
   trimEnd?: number;
   quality?: 'high' | 'medium' | 'low';
+  videoPadding?: number;
+  backgroundColor?: string;
 }
 
 // Singleton FFmpeg instance
@@ -33,7 +35,7 @@ export const useVideoProcessor = () => {
         const ffmpeg = new FFmpeg();
         ffmpegInstance = ffmpeg;
 
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.15/dist/umd';
         await ffmpeg.load({
           coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
           wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
@@ -43,7 +45,8 @@ export const useVideoProcessor = () => {
         console.log('FFmpeg loaded successfully');
       } catch (error) {
         console.error('FFmpeg loading failed:', error);
-        throw error;
+        console.error('Error details:', error instanceof Error ? error.message : error);
+        throw new Error(`Failed to load FFmpeg: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     })();
 
@@ -65,23 +68,47 @@ export const useVideoProcessor = () => {
     // Build FFmpeg command
     const args = ['-i', 'input.webm'];
     
+    // Get video dimensions first for accurate processing
+    const tempVideo = document.createElement('video');
+    tempVideo.src = URL.createObjectURL(videoBlob);
+    await new Promise((resolve) => {
+      tempVideo.onloadedmetadata = () => resolve(null);
+    });
+    
+    const videoWidth = tempVideo.videoWidth || 1920;
+    const videoHeight = tempVideo.videoHeight || 1080;
+    URL.revokeObjectURL(tempVideo.src);
+    
+    console.log('Processing video with dimensions:', videoWidth, 'x', videoHeight);
+    console.log('Processing options:', options);
+
     // Video filters
     const filters: string[] = [];
     
     // Crop filter
     if (options.cropX !== undefined && options.cropY !== undefined && 
         options.cropWidth !== undefined && options.cropHeight !== undefined) {
-      const cropW = Math.round(1920 * (options.cropWidth / 100));
-      const cropH = Math.round(1080 * (options.cropHeight / 100));
-      const cropX = Math.round(1920 * (options.cropX / 100));
-      const cropY = Math.round(1080 * (options.cropY / 100));
+      const cropW = Math.round(videoWidth * (options.cropWidth / 100));
+      const cropH = Math.round(videoHeight * (options.cropHeight / 100));
+      const cropX = Math.round(videoWidth * (options.cropX / 100));
+      const cropY = Math.round(videoHeight * (options.cropY / 100));
       filters.push(`crop=${cropW}:${cropH}:${cropX}:${cropY}`);
     }
     
     // Zoom filter (scale)
     if (options.zoom && options.zoom !== 1) {
-      const scale = Math.round(1920 * options.zoom);
-      filters.push(`scale=${scale}:${Math.round(scale * 9/16)}`);
+      const scale = Math.round(videoWidth * options.zoom);
+      filters.push(`scale=${scale}:${Math.round(scale * (videoHeight/videoWidth))}`);
+    }
+    
+    // Padding filter - add padding around video with background color
+    if (options.videoPadding && options.videoPadding > 0) {
+      const padding = options.videoPadding;
+      const bgColor = options.backgroundColor || '#000000';
+      // Convert hex color to FFmpeg format (remove # and ensure 6 chars)
+      const ffmpegColor = bgColor.replace('#', '').padEnd(6, '0');
+      console.log('Adding padding:', padding, 'with background color:', ffmpegColor);
+      filters.push(`pad=${videoWidth + 2*padding}:${videoHeight + 2*padding}:${padding}:${padding}:0x${ffmpegColor}`);
     }
     
     if (filters.length > 0) {

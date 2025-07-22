@@ -2,13 +2,15 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
+import { useVideoProcessor } from '@/hooks/useVideoProcessor';
+import { useToast } from '@/hooks/use-toast';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -70,6 +72,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Track processed zoom effects to prevent duplicate updates
   const lastProcessedZoomRef = useRef<string | null>(null);
   const zoomOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Export states
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const { processVideo } = useVideoProcessor();
+  const { toast } = useToast();
   
   // Background color presets
   const colorPresets = [
@@ -599,6 +607,74 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
+  // Export function
+  const handleExport = async () => {
+    if (!src || isExporting) return;
+    
+    setIsExporting(true);
+    setExportProgress(0);
+    
+    try {
+      console.log('Starting export with settings:', {
+        videoPadding,
+        backgroundColor,
+        trimStart,
+        trimEnd
+      });
+      
+      toast({
+        title: "Export Started",
+        description: "Processing your video with padding and background..."
+      });
+      
+      // Fetch the video blob from the src
+      const response = await fetch(src);
+      const videoBlob = await response.blob();
+      
+      // Process video with only videoPadding and backgroundColor
+      const processedBlob = await processVideo(
+        videoBlob,
+        {
+          videoPadding,
+          backgroundColor,
+          // Add trimming if user has trimmed the video
+          ...(trimStart > 0 && { trimStart }),
+          ...(trimEnd < duration && trimEnd > 0 && { trimEnd })
+        },
+        (progress) => {
+          console.log('Export progress:', progress);
+          setExportProgress(progress);
+        }
+      );
+      
+      // Download the processed video
+      const url = URL.createObjectURL(processedBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `edited-video-${Date.now()}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Export Complete!",
+        description: "Your video has been processed and downloaded."
+      });
+      
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "An error occurred during export",
+        variant: "destructive"
+      });
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
+
   return (
     <div className={cn("space-y-6", className)}>
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
@@ -1086,6 +1162,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         >
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
+        </Button>
+
+        <Button
+          onClick={handleExport}
+          variant="default"
+          size="sm"
+          disabled={isExporting || !src}
+          className="ml-auto"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          {isExporting ? `Exporting... ${Math.round(exportProgress)}%` : 'Export Video'}
         </Button>
       </div>
 
