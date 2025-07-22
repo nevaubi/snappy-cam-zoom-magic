@@ -741,13 +741,13 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           <div className="lg:col-span-1">
             <div className="bg-card/80 border border-border rounded-lg p-4 shadow-lg shadow-primary/5">
             <Tabs defaultValue="display" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50">
-                <TabsTrigger value="display" className="flex items-center gap-2 text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-                  <Settings className="h-3 w-3" />
+              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 h-12">
+                <TabsTrigger value="display" className="flex items-center gap-2 text-sm text-white data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+                  <Settings className="h-4 w-4" />
                   Display
                 </TabsTrigger>
-                <TabsTrigger value="zoom" className="flex items-center gap-2 text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-                  <ZoomIn className="h-3 w-3" />
+                <TabsTrigger value="zoom" className="flex items-center gap-2 text-sm text-white data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+                  <ZoomIn className="h-4 w-4" />
                   Zoom
                 </TabsTrigger>
               </TabsList>
