@@ -1,14 +1,24 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
+import { Play, Pause, Crop, ZoomIn, Plus, Trash2, Palette, Image, Settings, Maximize, CornerDownLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ZoomTimeline } from './ZoomTimeline';
+import { ZoomGridSelector } from './ZoomGridSelector';
+import { VideoExportButton } from './VideoExportButton';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
-import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
-import { ZoomPresets } from './ZoomPresets';
-import { ZoomGridSelector } from './ZoomGridSelector';
+
+interface ZoomEffect {
+  id: string;
+  startTime: number;
+  endTime: number;
+  zoomAmount: number;
+  zoomSpeed: number;
+  targetX: number;
+  targetY: number;
+}
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -29,6 +39,9 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [isDragging, setIsDragging] = useState<'start' | 'end' | 'scrub' | null>(null);
+  
+  // Video blob for export
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   
   // Video display styling states
   const [videoPadding, setVideoPadding] = useState(0);
@@ -71,6 +84,9 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const lastProcessedZoomRef = useRef<string | null>(null);
   const zoomOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Quality setting for export
+  const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('high');
+  
   // Background color presets
   const colorPresets = [
     { name: 'Black', value: '#000000' },
@@ -105,6 +121,23 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   useEffect(() => {
     hasInitializedTrim.current = false;
     console.log('Src changed, reset trim initialization');
+  }, [src]);
+
+  // Fetch video blob when src changes
+  useEffect(() => {
+    const fetchVideoBlob = async () => {
+      try {
+        const response = await fetch(src);
+        const blob = await response.blob();
+        setVideoBlob(blob);
+      } catch (error) {
+        console.error('Failed to fetch video blob:', error);
+      }
+    };
+    
+    if (src) {
+      fetchVideoBlob();
+    }
   }, [src]);
 
   useEffect(() => {
@@ -229,7 +262,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     const totalSeconds = time % 60;
     const wholeSeconds = Math.floor(totalSeconds);
     const tenths = Math.floor((totalSeconds - wholeSeconds) * 10);
-    return `${minutes}:${wholeSeconds.toString().padStart(2, '0')}${tenths}`;
+    return `${minutes}:${wholeSeconds.toString().padStart(2, '0')}.${tenths}`;
   };
 
   const handleTrimMouseDown = (e: React.MouseEvent, type: 'start' | 'end' | 'scrub') => {
@@ -290,15 +323,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     };
   }, [isDragging, handleTrimMouseMove, handleTrimMouseUp]);
 
-  const resetTrim = () => {
-    console.log('Resetting trim to full duration:', duration);
-    setTrimStart(0);
-    setTrimEnd(duration);
-  };
-
-  const getTrimmedDuration = () => trimEnd - trimStart;
-
-  const handleCropMouseDown = (e: React.MouseEvent, type: typeof cropDragging) => {
+  // Crop handling functions
+  const handleCropMouseDown = (e: React.MouseEvent, type: 'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 'e' | 's' | 'w') => {
     e.preventDefault();
     e.stopPropagation();
     setCropDragging(type);
@@ -310,51 +336,50 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     const rect = cropOverlayRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const percentageX = Math.max(0, Math.min(1, x / rect.width));
-    const percentageY = Math.max(0, Math.min(1, y / rect.height));
+    const percentageX = (x / rect.width) * 100;
+    const percentageY = (y / rect.height) * 100;
 
     setCropSettings(prev => {
       const newCrop = { ...prev };
       const minSize = 10;
 
       if (cropDragging === 'move') {
-        const deltaX = percentageX * 100 - (prev.x + prev.width / 2);
-        const deltaY = percentageY * 100 - (prev.y + prev.height / 2);
-        
-        newCrop.x = Math.max(0, Math.min(100 - prev.width, prev.x + deltaX));
-        newCrop.y = Math.max(0, Math.min(100 - prev.height, prev.y + deltaY));
+        const halfWidth = prev.width / 2;
+        const halfHeight = prev.height / 2;
+        newCrop.x = Math.max(0, Math.min(100 - prev.width, percentageX - halfWidth));
+        newCrop.y = Math.max(0, Math.min(100 - prev.height, percentageY - halfHeight));
       } else if (cropDragging === 'nw') {
-        const newX = Math.min(prev.x + prev.width - minSize, percentageX * 100);
-        const newY = Math.min(prev.y + prev.height - minSize, percentageY * 100);
+        const newX = Math.min(prev.x + prev.width - minSize, percentageX);
+        const newY = Math.min(prev.y + prev.height - minSize, percentageY);
         newCrop.width = prev.width + (prev.x - newX);
         newCrop.height = prev.height + (prev.y - newY);
         newCrop.x = newX;
         newCrop.y = newY;
       } else if (cropDragging === 'ne') {
-        const newY = Math.min(prev.y + prev.height - minSize, percentageY * 100);
-        newCrop.width = Math.max(minSize, percentageX * 100 - prev.x);
+        const newY = Math.min(prev.y + prev.height - minSize, percentageY);
+        newCrop.width = Math.max(minSize, percentageX - prev.x);
         newCrop.height = prev.height + (prev.y - newY);
         newCrop.y = newY;
       } else if (cropDragging === 'sw') {
-        const newX = Math.min(prev.x + prev.width - minSize, percentageX * 100);
+        const newX = Math.min(prev.x + prev.width - minSize, percentageX);
         newCrop.width = prev.width + (prev.x - newX);
-        newCrop.height = Math.max(minSize, percentageY * 100 - prev.y);
+        newCrop.height = Math.max(minSize, percentageY - prev.y);
         newCrop.x = newX;
       } else if (cropDragging === 'se') {
-        newCrop.width = Math.max(minSize, percentageX * 100 - prev.x);
-        newCrop.height = Math.max(minSize, percentageY * 100 - prev.y);
+        newCrop.width = Math.max(minSize, percentageX - prev.x);
+        newCrop.height = Math.max(minSize, percentageY - prev.y);
       } else if (cropDragging === 'n') {
-        const newY = Math.min(prev.y + prev.height - minSize, percentageY * 100);
+        const newY = Math.min(prev.y + prev.height - minSize, percentageY);
         newCrop.height = prev.height + (prev.y - newY);
         newCrop.y = newY;
       } else if (cropDragging === 's') {
-        newCrop.height = Math.max(minSize, percentageY * 100 - prev.y);
+        newCrop.height = Math.max(minSize, percentageY - prev.y);
       } else if (cropDragging === 'w') {
-        const newX = Math.min(prev.x + prev.width - minSize, percentageX * 100);
+        const newX = Math.min(prev.x + prev.width - minSize, percentageX);
         newCrop.width = prev.width + (prev.x - newX);
         newCrop.x = newX;
       } else if (cropDragging === 'e') {
-        newCrop.width = Math.max(minSize, percentageX * 100 - prev.x);
+        newCrop.width = Math.max(minSize, percentageX - prev.x);
       }
 
       newCrop.x = Math.max(0, newCrop.x);
@@ -688,28 +713,28 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                     </div>
                     
                     <div 
-                      className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-nw-resize"
+                      className="absolute -left-1 -top-1 w-3 h-3 bg-white border border-gray-300 cursor-nw-resize"
                       onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
                     />
                     <div 
-                      className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-gray-300 cursor-ne-resize"
+                      className="absolute -right-1 -top-1 w-3 h-3 bg-white border border-gray-300 cursor-ne-resize"
                       onMouseDown={(e) => handleCropMouseDown(e, 'ne')}
                     />
                     <div 
-                      className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-sw-resize"
+                      className="absolute -left-1 -bottom-1 w-3 h-3 bg-white border border-gray-300 cursor-sw-resize"
                       onMouseDown={(e) => handleCropMouseDown(e, 'sw')}
                     />
                     <div 
-                      className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-gray-300 cursor-se-resize"
+                      className="absolute -right-1 -bottom-1 w-3 h-3 bg-white border border-gray-300 cursor-se-resize"
                       onMouseDown={(e) => handleCropMouseDown(e, 'se')}
                     />
                     
                     <div 
-                      className="absolute -top-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-n-resize transform -translate-x-1/2"
+                      className="absolute left-1/2 -top-1 w-3 h-2 bg-white border border-gray-300 cursor-n-resize transform -translate-x-1/2"
                       onMouseDown={(e) => handleCropMouseDown(e, 'n')}
                     />
                     <div 
-                      className="absolute -bottom-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-s-resize transform -translate-x-1/2"
+                      className="absolute left-1/2 -bottom-1 w-3 h-2 bg-white border border-gray-300 cursor-s-resize transform -translate-x-1/2"
                       onMouseDown={(e) => handleCropMouseDown(e, 's')}
                     />
                     <div 
@@ -804,25 +829,23 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                         <Crop className="h-3 w-3 mr-2" />
                         {isCropMode ? 'Exit Crop' : 'Crop Video'}
                       </Button>
-                      
                       {isCropMode && (
-                        <>
-                          <Button
-                            onClick={applyCrop}
-                            variant="default"
-                            size="sm"
-                          >
-                            Apply
-                          </Button>
-                          <Button
-                            onClick={resetCrop}
-                            variant="outline"
-                            size="sm"
-                            disabled={cropSettings.x === 0 && cropSettings.y === 0 && cropSettings.width === 100 && cropSettings.height === 100}
-                          >
-                            Reset
-                          </Button>
-                        </>
+                        <Button
+                          onClick={applyCrop}
+                          size="sm"
+                          variant="default"
+                        >
+                          Apply
+                        </Button>
+                      )}
+                      {(appliedCropSettings.width < 100 || appliedCropSettings.height < 100) && (
+                        <Button
+                          onClick={resetCrop}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Reset
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -831,100 +854,133 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                 {/* Background Settings */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-medium flex items-center gap-2">
-                    <ImageIcon className="h-4 w-4" />
-                    Background Settings
+                    <Image className="h-4 w-4" />
+                    Background
                   </h3>
                   
-                  {/* Color presets */}
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-2 block">Color Presets</label>
-                    <div className="flex flex-wrap gap-2">
-                      {colorPresets.map((color) => (
-                        <button
-                          key={color.value}
-                          onClick={() => setBackgroundColor(color.value)}
-                          className={cn(
-                            "w-8 h-8 rounded-full border-2 transition-all duration-200 hover:scale-110",
-                            backgroundColor === color.value 
-                              ? "border-primary shadow-lg scale-110" 
-                              : "border-border hover:border-muted-foreground"
-                          )}
-                          style={{ backgroundColor: color.value }}
-                          title={color.name}
-                          aria-label={`Set background to ${color.name}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Image options */}
                   <div className="space-y-3">
-                    <div className="space-y-3">
-                      {/* Default images */}
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => setBackgroundType('color')}
+                        variant={backgroundType === 'color' ? 'default' : 'outline'}
+                        size="sm"
+                        className="flex-1"
+                      >
+                        Color
+                      </Button>
+                      <Button
+                        onClick={() => setBackgroundType('image')}
+                        variant={backgroundType === 'image' ? 'default' : 'outline'}
+                        size="sm"
+                        className="flex-1"
+                      >
+                        Image
+                      </Button>
+                    </div>
+
+                    {backgroundType === 'color' ? (
                       <div>
-                        <label className="text-xs text-muted-foreground mb-2 block">Default Images</label>
-                        <div className="flex gap-2">
-                          {defaultImages.map((image) => (
+                        <label className="text-xs text-muted-foreground mb-2 block">Select Color</label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {colorPresets.map((preset) => (
                             <button
-                              key={image.name}
-                              onClick={() => selectDefaultImage(image.src)}
+                              key={preset.value}
+                              onClick={() => setBackgroundColor(preset.value)}
                               className={cn(
-                                "w-16 h-16 rounded-md border-2 transition-all duration-200 hover:scale-105 bg-cover bg-center",
-                                backgroundImage === image.src ? "border-primary shadow-lg scale-105" : "border-border hover:border-muted-foreground"
+                                "w-full h-8 rounded border-2 transition-all",
+                                backgroundColor === preset.value
+                                  ? "border-primary ring-2 ring-primary/30"
+                                  : "border-border hover:border-primary/50"
                               )}
-                              style={{ backgroundImage: `url(${image.src})` }}
-                              title={image.name}
-                              aria-label={`Set background to ${image.name}`}
+                              style={{ backgroundColor: preset.value }}
+                              title={preset.name}
                             />
                           ))}
                         </div>
+                        <input
+                          type="color"
+                          value={backgroundColor}
+                          onChange={(e) => setBackgroundColor(e.target.value)}
+                          className="w-full h-8 mt-2 rounded cursor-pointer"
+                        />
                       </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-2 block">Default Images</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {defaultImages.map((img) => (
+                              <button
+                                key={img.name}
+                                onClick={() => selectDefaultImage(img.src)}
+                                className={cn(
+                                  "relative aspect-video rounded overflow-hidden border-2 transition-all",
+                                  backgroundImage === img.src
+                                    ? "border-primary ring-2 ring-primary/30"
+                                    : "border-border hover:border-primary/50"
+                                )}
+                              >
+                                <img 
+                                  src={img.src} 
+                                  alt={img.name}
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                  <span className="text-white text-xs">{img.name}</span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-                      {/* Custom upload */}
-                      <div>
-                        <label className="text-xs text-muted-foreground mb-2 block">Upload Custom Image</label>
-                        <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-2 px-3 py-2 border border-input rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                            <Upload className="w-4 h-4" />
-                            <span className="text-sm">Choose Image</span>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-2 block">Upload Custom</label>
+                          <div className="flex gap-2">
                             <input
                               type="file"
                               accept="image/*"
                               onChange={handleImageUpload}
                               className="hidden"
+                              id="bg-image-upload"
                             />
-                          </label>
-                          {backgroundImage && !defaultImages.some(img => img.src === backgroundImage) && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              onClick={() => {
-                                setBackgroundImage(null);
-                                setBackgroundType('color');
-                              }}
+                            <label 
+                              htmlFor="bg-image-upload"
+                              className="flex-1 px-3 py-2 bg-secondary hover:bg-secondary/80 rounded-md cursor-pointer text-sm text-center transition-colors"
                             >
-                              Remove
-                            </Button>
-                          )}
+                              Choose Image
+                            </label>
+                            {backgroundImage && !defaultImages.some(img => img.src === backgroundImage) && (
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => {
+                                  setBackgroundImage(null);
+                                  setBackgroundType('color');
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Image fit controls */}
-                      {backgroundImage && (
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-2 block">Image Fit</label>
-                          <select 
-                            value={backgroundImageFit}
-                            onChange={(e) => setBackgroundImageFit(e.target.value as 'cover' | 'contain' | 'fill')}
-                            className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground text-sm"
-                          >
-                            <option value="cover">Cover (fill area, may crop)</option>
-                            <option value="contain">Contain (fit within area)</option>
-                            <option value="fill">Fill (stretch to fit)</option>
-                          </select>
-                        </div>
-                      )}
-                    </div>
+                        {/* Image fit controls */}
+                        {backgroundImage && (
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-2 block">Image Fit</label>
+                            <select 
+                              value={backgroundImageFit}
+                              onChange={(e) => setBackgroundImageFit(e.target.value as 'cover' | 'contain' | 'fill')}
+                              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground text-sm"
+                            >
+                              <option value="cover">Cover (fill area, may crop)</option>
+                              <option value="contain">Contain (fit within area)</option>
+                              <option value="fill">Fill (stretch to fit)</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </TabsContent>
@@ -958,46 +1014,72 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                           className={cn(
                             "p-2 border rounded-md cursor-pointer transition-colors",
                             selectedZoomId === zoom.id
-                              ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"
-                              : "border-border hover:bg-muted/50"
+                              ? "border-primary bg-primary/10"
+                              : "border-border hover:border-primary/50"
                           )}
                           onClick={() => setSelectedZoomId(zoom.id)}
                         >
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-medium">Zoom {zoom.zoomAmount}x</span>
-                            <button
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">
+                              Zoom {zoom.zoomAmount}x
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 deleteZoomEffect(zoom.id);
                               }}
-                              className="text-muted-foreground hover:text-destructive"
                             >
-                              ×
-                            </button>
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {formatTime(zoom.startTime)} - {formatTime(zoom.endTime)}
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
-                </div>
 
-                {/* Selected Zoom Settings */}
-                {selectedZoom && (
-                  <div className="space-y-4 border-t pt-4">
-                    <div className="space-y-3">
-                      <ZoomPresets
-                        title="Zoom Amount"
-                        options={zoomAmounts}
-                        selectedValue={selectedZoom.zoomAmount}
-                        onSelect={(value) => updateSelectedZoom('zoomAmount', value)}
-                      />
+                  {/* Selected Zoom Controls */}
+                  {selectedZoom && (
+                    <div className="space-y-3 pt-3 border-t">
+                      <h4 className="text-sm font-medium">Edit Zoom Effect</h4>
+                      
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Zoom Amount</label>
+                        <div className="grid grid-cols-5 gap-1">
+                          {zoomAmounts.map((amount) => (
+                            <Button
+                              key={amount.value}
+                              variant={selectedZoom.zoomAmount === amount.value ? "default" : "outline"}
+                              size="sm"
+                              className="text-xs px-2"
+                              onClick={() => updateSelectedZoom('zoomAmount', amount.value)}
+                            >
+                              {amount.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
 
-                      <ZoomPresets
-                        title="Zoom Speed"
-                        options={zoomSpeeds}
-                        selectedValue={selectedZoom.zoomSpeed}
-                        onSelect={(value) => updateSelectedZoom('zoomSpeed', value)}
-                      />
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Zoom Speed</label>
+                        <div className="grid grid-cols-5 gap-1">
+                          {zoomSpeeds.map((speed) => (
+                            <Button
+                              key={speed.value}
+                              variant={selectedZoom.zoomSpeed === speed.value ? "default" : "outline"}
+                              size="sm"
+                              className="text-xs px-2"
+                              onClick={() => updateSelectedZoom('zoomSpeed', speed.value)}
+                            >
+                              {speed.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
 
                       <ZoomGridSelector
                         videoRef={videoRef}
@@ -1009,151 +1091,99 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                         }}
                       />
                     </div>
-                  </div>
-                )}
-
-                {zoomEffects.length === 0 && (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <ZoomIn className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Click "Add Zoom" to create zoom effects</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </TabsContent>
             </Tabs>
           </div>
         </div>
       </div>
 
-      {/* Bottom Section - Full-width Progress Bar */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{formatTime(currentTime - trimStart)}</span>
-          <span>{
-            trimEnd > trimStart 
-              ? formatTime(trimEnd - trimStart) 
-              : (duration > 0 ? formatTime(duration) : 'Loading...')
-          }</span>
-        </div>
-        
-        <Slider
-          value={[
-            trimEnd > trimStart 
-              ? ((currentTime - trimStart) / (trimEnd - trimStart)) * 100 
-              : 0
-          ]}
-          onValueChange={handleSeek}
-          max={100}
-          step={0.1}
-          className="w-full cursor-pointer"
-        />
-      </div>
-
-      {/* Full-width Transport Controls */}
-      <div className="flex items-center gap-4">
-        <Button
-          onClick={handlePlay}
-          disabled={isPlaying}
-          variant="outline"
-          size="sm"
-        >
-          <Play className="h-4 w-4 mr-2" />
-          Play
-        </Button>
-        
-        <Button
-          onClick={handlePause}
-          disabled={!isPlaying}
-          variant="outline"
-          size="sm"
-        >
-          <Pause className="h-4 w-4 mr-2" />
-          Pause
-        </Button>
-        
-        <span className="text-sm text-muted-foreground">
-          {duration > 0 ? (
-            `Duration: ${formatTime(duration)}`
-          ) : (
-            'Duration: Loading...'
-          )}
-        </span>
-
-        <Button
-          onClick={resetTrim}
-          variant="ghost"
-          size="sm"
-          disabled={trimStart === 0 && trimEnd === duration}
-        >
-          <RotateCcw className="h-4 w-4 mr-2" />
-          Reset Trim
-        </Button>
-      </div>
-
-      {duration > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>{formatTime(trimStart)}</span>
-            <span className="font-medium">Trimmed: {formatTime(getTrimmedDuration())}</span>
-            <span>{formatTime(trimEnd)}</span>
+      {/* Video Controls */}
+      <div className="bg-card/50 backdrop-blur-sm border border-border rounded-lg p-4 shadow-sm">
+        <div className="flex items-center gap-4">
+          <Button
+            onClick={togglePlay}
+            size="sm"
+            variant="outline"
+            className="px-3"
+          >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </Button>
+          
+          <div className="flex-1">
+            <Slider
+              value={[duration > 0 ? ((currentTime - trimStart) / (trimEnd - trimStart)) * 100 : 0]}
+              onValueChange={handleSeek}
+              max={100}
+              step={0.1}
+              className="w-full"
+              disabled={!duration || trimEnd <= trimStart}
+            />
           </div>
           
-          <div 
-            ref={trimmerRef}
-            className="relative w-full h-12 bg-muted rounded-lg cursor-pointer select-none"
-            onMouseDown={(e) => {
-              const rect = trimmerRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              const x = e.clientX - rect.left;
-              const percentage = x / rect.width;
-              const time = percentage * duration;
-              
-              if (time >= trimStart && time <= trimEnd) {
-                handleTrimMouseDown(e, 'scrub');
-              }
-            }}
-          >
-            <div className="absolute inset-0 bg-muted-foreground/20 rounded-lg" />
-            
-            <div 
-              className="absolute top-0 bottom-0 bg-primary/30 border-t-2 border-b-2 border-primary"
-              style={{
-                left: `${(trimStart / duration) * 100}%`,
-                width: `${((trimEnd - trimStart) / duration) * 100}%`,
-              }}
-            />
-            
-            <div 
-              className="absolute top-0 bottom-0 w-0.5 bg-foreground z-10"
-              style={{
-                left: `${(currentTime / duration) * 100}%`,
-              }}
-            />
-            
-            <div 
-              className={cn(
-                "absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
-                isDragging === 'start' && "bg-primary/80"
-              )}
-              style={{
-                left: `${(trimStart / duration) * 100}%`,
-              }}
-              onMouseDown={(e) => handleTrimMouseDown(e, 'start')}
-            >
-              <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
+          <div className="text-sm font-mono whitespace-nowrap">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+        </div>
+      </div>
+
+      {/* Trim Controls */}
+      {duration > 0 && (
+        <div className="bg-card/50 backdrop-blur-sm border border-border rounded-lg p-4 shadow-sm">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Trim Video</span>
+              <span className="text-xs text-muted-foreground">
+                Duration: {formatTime(trimEnd - trimStart)}
+              </span>
             </div>
             
-            <div 
-              className={cn(
-                "absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
-                isDragging === 'end' && "bg-primary/80"
-              )}
-              style={{
-                left: `${(trimEnd / duration) * 100}%`,
-                transform: 'translateX(-100%)',
-              }}
-              onMouseDown={(e) => handleTrimMouseDown(e, 'end')}
-            >
-              <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
+            <div className="relative h-16 bg-secondary/50 rounded-md overflow-hidden" ref={trimmerRef}>
+              <div 
+                className="absolute inset-y-0 bg-primary/20"
+                style={{
+                  left: `${(trimStart / duration) * 100}%`,
+                  width: `${((trimEnd - trimStart) / duration) * 100}%`,
+                }}
+              />
+              
+              <div 
+                className="absolute top-0 bottom-0 w-full cursor-pointer"
+                onMouseDown={(e) => handleTrimMouseDown(e, 'scrub')}
+              />
+              
+              <div 
+                className={cn(
+                  "absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
+                  isDragging === 'start' && "bg-primary/80"
+                )}
+                style={{
+                  left: `${(trimStart / duration) * 100}%`,
+                }}
+                onMouseDown={(e) => handleTrimMouseDown(e, 'start')}
+              >
+                <div className="absolute inset-y-0 right-1/2 w-px bg-primary-foreground transform translate-x-0.5" />
+              </div>
+              
+              <div 
+                className={cn(
+                  "absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
+                  isDragging === 'end' && "bg-primary/80"
+                )}
+                style={{
+                  left: `${(trimEnd / duration) * 100}%`,
+                  transform: 'translateX(-100%)',
+                }}
+                onMouseDown={(e) => handleTrimMouseDown(e, 'end')}
+              >
+                <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
+              </div>
+            </div>
+            
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{formatTime(trimStart)}</span>
+              <span>{formatTime(trimEnd)}</span>
             </div>
           </div>
           
@@ -1177,6 +1207,43 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           )}
         </div>
       )}
+
+      {/* Export Controls */}
+      <div className="bg-card/50 backdrop-blur-sm border border-border rounded-lg p-4 shadow-sm">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">Export Settings</h3>
+            <select 
+              value={quality}
+              onChange={(e) => setQuality(e.target.value as 'high' | 'medium' | 'low')}
+              className="px-3 py-1 border border-input rounded-md bg-background text-foreground text-sm"
+            >
+              <option value="high">High Quality</option>
+              <option value="medium">Medium Quality</option>
+              <option value="low">Low Quality</option>
+            </select>
+          </div>
+          
+          <VideoExportButton
+            videoBlob={videoBlob}
+            videoRef={videoRef}
+            editingState={{
+              trimStart,
+              trimEnd,
+              duration,
+              videoPadding,
+              videoCornerRadius,
+              backgroundColor,
+              backgroundType,
+              backgroundImage,
+              backgroundImageFit,
+              appliedCropSettings,
+              zoomEffects,
+              quality
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 };
