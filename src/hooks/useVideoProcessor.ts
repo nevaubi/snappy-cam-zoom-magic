@@ -35,10 +35,10 @@ export const useVideoProcessor = () => {
         const ffmpeg = new FFmpeg();
         ffmpegInstance = ffmpeg;
 
-        // Multiple CDN fallbacks for reliability - using version 0.12.6 that actually exists
+        // Multiple CDN fallbacks for reliability - using version 0.12.10 (actual latest WebAssembly version)
         const cdnOptions = [
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
-          'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd',
+          'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd',
           'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg-core/0.12.10/umd'
         ];
 
@@ -48,6 +48,7 @@ export const useVideoProcessor = () => {
         for (const baseURL of cdnOptions) {
           try {
             console.log(`Attempting to load FFmpeg from: ${baseURL}`);
+            console.log(`Loading @ffmpeg/core version 0.12.10 (WebAssembly version)`);
             
             await ffmpeg.load({
               coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
@@ -56,6 +57,7 @@ export const useVideoProcessor = () => {
 
             loadSuccess = true;
             console.log(`FFmpeg loaded successfully from: ${baseURL}`);
+            console.log(`Successfully loaded @ffmpeg/core@0.12.10 WebAssembly version`);
             break;
           } catch (error) {
             console.warn(`Failed to load from ${baseURL}:`, error);
