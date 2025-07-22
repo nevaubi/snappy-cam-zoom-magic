@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
+import { useScreenCapture } from '@/hooks/useScreenCapture';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
@@ -29,6 +31,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [isDragging, setIsDragging] = useState<'start' | 'end' | 'scrub' | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  
+  // Screen capture hook
+  const { getTabStream, cropToPreview, startRecording, stopRecording, isSupported, cleanup } = useScreenCapture();
   
   // Video display styling states
   const [videoPadding, setVideoPadding] = useState(0);
@@ -577,8 +583,92 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       if (zoomOutTimeoutRef.current) {
         clearTimeout(zoomOutTimeoutRef.current);
       }
+      cleanup();
     };
-  }, []);
+  }, [cleanup]);
+
+  // Export video function
+  const handleExportVideo = useCallback(async () => {
+    if (!isSupported()) {
+      toast({
+        title: "Screen Capture Not Supported",
+        description: "Your browser doesn't support screen capture. Please use Chrome, Edge, or Brave browser.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isExporting) {
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      
+      toast({
+        title: "Screen Capture Starting",
+        description: "Please select 'This tab' when prompted and ensure this tab remains visible during recording.",
+      });
+
+      // Get screen capture stream
+      const stream = await getTabStream();
+      const videoTrack = stream.getVideoTracks()[0];
+
+      // Apply crop target to the video element if supported
+      if (videoRef.current) {
+        await cropToPreview(videoTrack, videoRef.current);
+      }
+
+      // Pause current playback
+      const wasPlaying = isPlaying;
+      if (wasPlaying) {
+        await handlePause();
+      }
+
+      // Seek to trim start
+      const video = videoRef.current;
+      if (video) {
+        video.currentTime = trimStart;
+        setCurrentTime(trimStart);
+      }
+
+      const recordingDuration = (trimEnd - trimStart) * 1000; // Convert to milliseconds
+      const filename = `video-export-${Date.now()}.webm`;
+
+      toast({
+        title: "Recording Started",
+        description: `Recording ${formatTime(trimEnd - trimStart)} of video...`,
+      });
+
+      // Start recording
+      await startRecording(stream, filename);
+
+      // Start video playback
+      await handlePlay();
+
+      // Stop recording after the trimmed duration
+      setTimeout(async () => {
+        stopRecording();
+        await handlePause();
+        
+        toast({
+          title: "Export Complete",
+          description: "Your video has been downloaded successfully!",
+        });
+        
+        setIsExporting(false);
+      }, recordingDuration);
+
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "An unknown error occurred during export.",
+        variant: "destructive",
+      });
+      setIsExporting(false);
+    }
+  }, [isSupported, isExporting, getTabStream, cropToPreview, isPlaying, handlePause, handlePlay, trimStart, trimEnd, startRecording, stopRecording, formatTime]);
 
   // Zoom presets data
   const zoomAmounts = [
@@ -1086,6 +1176,16 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         >
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
+        </Button>
+
+        <Button
+          onClick={handleExportVideo}
+          disabled={isExporting || duration === 0}
+          variant="default"
+          size="sm"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          {isExporting ? 'Exporting...' : 'Export Video'}
         </Button>
       </div>
 
