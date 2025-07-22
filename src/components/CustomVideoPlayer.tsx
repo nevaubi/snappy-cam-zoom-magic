@@ -2,17 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Download } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { useClientVideoProcessor } from '@/hooks/useClientVideoProcessor';
-import { ProcessingProgress } from './ProcessingProgress';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -27,11 +23,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trimmerRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
-  const { processVideo, isProcessing, progress } = useClientVideoProcessor();
-  
-  // Export states
-  const [isExporting, setIsExporting] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -504,33 +495,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     }
   };
 
-  // Helper function to download video from URL
-  const downloadVideo = async (url: string, filename: string) => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to download video: ${response.statusText}`);
-      }
-      
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      
-      // Create temporary download link
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-      console.error('Download error:', error);
-      throw new Error('Failed to download processed video');
-    }
-  };
-
   const updateSelectedZoom = <K extends keyof ZoomEffect>(
     key: K, 
     value: ZoomEffect[K]
@@ -635,58 +599,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
-  // Export functionality
-  const handleExport = async () => {
-    if (!src || isProcessing) return;
-
-    toast({
-      title: "Starting export...",
-      description: "Processing your video with client-side FFmpeg",
-    });
-
-    try {
-      // Extract filename from URL for the processed video
-      const urlParts = src.split('/');
-      const originalFilename = urlParts[urlParts.length - 1] || 'video.webm';
-
-      // Process video client-side
-      const processedVideoUrl = await processVideo(
-        src,
-        trimStart,
-        trimEnd,
-        originalFilename
-      );
-
-      await downloadVideo(processedVideoUrl, 'processed-video.webm');
-      
-      toast({
-        title: "Export successful",
-        description: "Your video has been downloaded to your device",
-      });
-
-    } catch (error: any) {
-      console.error('Export error:', error);
-      toast({
-        title: "Export failed",
-        description: error.message || "Something went wrong during video processing",
-        variant: "destructive"
-      });
-    }
-  };
-
   return (
     <div className={cn("space-y-6", className)}>
-      {/* Processing Progress Overlay */}
-      {progress && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <ProcessingProgress
-            stage={progress.stage}
-            progress={progress.progress}
-            message={progress.message}
-          />
-        </div>
-      )}
-      
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
       <div className="grid lg:grid-cols-4 gap-6">
         {/* Left Column - Video Player (75%) */}
@@ -1172,16 +1086,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         >
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
-        </Button>
-
-        <Button
-          onClick={handleExport}
-          disabled={isProcessing || !src}
-          variant="default"
-          size="sm"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          {isProcessing ? 'Processing...' : 'Export Video'}
         </Button>
       </div>
 
