@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Play, Square, Download, Settings, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 import { CustomVideoPlayer } from './CustomVideoPlayer';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { getDurationFromBlob } from '@/utils/videoDuration';
 
@@ -48,6 +49,7 @@ const QUALITY_PRESETS: Record<QualityPreset, QualityConfig> = {
 };
 
 const SimpleVideoRecorder = () => {
+  const { user } = useAuth();
   const [isRecording, setIsRecording] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string>('');
   const [quality, setQuality] = useState<QualityPreset>('high');
@@ -196,7 +198,8 @@ const SimpleVideoRecorder = () => {
           file_url: urlData.publicUrl,
           file_size: blob.size,
           duration,
-          quality_preset: quality
+          quality_preset: quality,
+          user_id: user?.id
         });
 
       if (dbError) throw dbError;
