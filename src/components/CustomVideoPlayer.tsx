@@ -501,6 +501,33 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     }
   };
 
+  // Helper function to download video from URL
+  const downloadVideo = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to download video: ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      
+      // Create temporary download link
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Download error:', error);
+      throw new Error('Failed to download processed video');
+    }
+  };
+
   const updateSelectedZoom = <K extends keyof ZoomEffect>(
     key: K, 
     value: ZoomEffect[K]
@@ -647,8 +674,16 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         description: "Your processed video is ready for download",
       });
 
-      // For now, just log the result - we'll add download functionality later
-      console.log('Processed video result:', data);
+      // Download the processed video
+      if (data.processedVideoUrl) {
+        await downloadVideo(data.processedVideoUrl, 'processed-video.webm');
+        toast({
+          title: "Export successful",
+          description: "Your video has been downloaded to your device",
+        });
+      } else {
+        throw new Error('No processed video URL received');
+      }
 
     } catch (error: any) {
       console.error('Export error:', error);
