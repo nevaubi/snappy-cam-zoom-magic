@@ -2,13 +2,15 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -23,6 +25,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trimmerRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  
+  // Export states
+  const [isExporting, setIsExporting] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -599,6 +605,63 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
+  // Export functionality
+  const handleExport = async () => {
+    if (!src || isExporting) return;
+
+    setIsExporting(true);
+    toast({
+      title: "Starting export...",
+      description: "Processing your video with server-side FFmpeg",
+    });
+
+    try {
+      // Collect all video settings for processing
+      const exportSettings = {
+        videoUrl: src,
+        trimStart,
+        trimEnd,
+        cropSettings: appliedCropSettings,
+        backgroundSettings: {
+          type: backgroundType,
+          color: backgroundColor,
+          image: backgroundImage,
+          imageFit: backgroundImageFit
+        },
+        displaySettings: {
+          padding: videoPadding,
+          cornerRadius: videoCornerRadius
+        },
+        zoomEffects: zoomEffects.length > 0 ? zoomEffects : null
+      };
+
+      // Call the Edge Function for processing
+      const { data, error } = await supabase.functions.invoke('process-video', {
+        body: exportSettings
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Export completed!",
+        description: "Your processed video is ready for download",
+      });
+
+      // For now, just log the result - we'll add download functionality later
+      console.log('Processed video result:', data);
+
+    } catch (error: any) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export failed",
+        description: error.message || "Something went wrong during video processing",
+        variant: "destructive"
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className={cn("space-y-6", className)}>
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
@@ -1086,6 +1149,16 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         >
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
+        </Button>
+
+        <Button
+          onClick={handleExport}
+          disabled={isExporting || !src}
+          variant="default"
+          size="sm"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          {isExporting ? 'Exporting...' : 'Export Video'}
         </Button>
       </div>
 
