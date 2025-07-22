@@ -35,17 +35,42 @@ export const useVideoProcessor = () => {
         const ffmpeg = new FFmpeg();
         ffmpegInstance = ffmpeg;
 
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.15/dist/umd';
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        });
+        // Multiple CDN fallbacks for reliability
+        const cdnOptions = [
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.15/dist/umd',
+          'https://unpkg.com/@ffmpeg/core@0.12.15/dist/umd',
+          'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.15/dist/umd'
+        ];
+
+        let loadSuccess = false;
+        let lastError: Error | null = null;
+
+        for (const baseURL of cdnOptions) {
+          try {
+            console.log(`Attempting to load FFmpeg from: ${baseURL}`);
+            
+            await ffmpeg.load({
+              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            });
+
+            loadSuccess = true;
+            console.log(`FFmpeg loaded successfully from: ${baseURL}`);
+            break;
+          } catch (error) {
+            console.warn(`Failed to load from ${baseURL}:`, error);
+            lastError = error instanceof Error ? error : new Error(String(error));
+            continue;
+          }
+        }
+
+        if (!loadSuccess) {
+          throw new Error(`Failed to load FFmpeg from all CDNs. Last error: ${lastError?.message || 'Unknown error'}`);
+        }
 
         isFFmpegLoaded = true;
-        console.log('FFmpeg loaded successfully');
       } catch (error) {
         console.error('FFmpeg loading failed:', error);
-        console.error('Error details:', error instanceof Error ? error.message : error);
         throw new Error(`Failed to load FFmpeg: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     })();
