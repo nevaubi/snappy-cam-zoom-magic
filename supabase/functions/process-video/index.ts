@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { FFmpeg } from 'https://esm.sh/@ffmpeg/ffmpeg@0.12.15';
-import { fetchFile, toBlobURL } from 'https://esm.sh/@ffmpeg/util@0.12.2';
 
 // Define types for the video processing settings
 interface ExportSettings {
@@ -51,13 +49,15 @@ async function downloadVideo(url: string): Promise<Uint8Array> {
 
 // Helper function to process video with FFmpeg
 async function processVideoWithFFmpeg(
-  videoData: Uint8Array, 
-  trimStart: number, 
+  videoData: Uint8Array,
+  trimStart: number,
   trimEnd: number
 ): Promise<Uint8Array> {
-  console.log('Processing video with FFmpeg - trim from', trimStart, 'to', trimEnd);
+  console.log('Edge function received video processing request - trim from', trimStart, 'to', trimEnd);
+  console.log('Note: Processing will be done client-side, returning original video data');
   
-  // Validate trim parameters
+  // Edge function now just validates parameters and passes through the video data
+  // Actual processing happens client-side with FFmpeg WASM
   if (trimStart >= trimEnd) {
     throw new Error('Invalid trim parameters: start time must be less than end time');
   }
@@ -65,66 +65,9 @@ async function processVideoWithFFmpeg(
   if (trimStart < 0) {
     throw new Error('Invalid trim parameters: start time cannot be negative');
   }
-
-  const ffmpeg = new FFmpeg();
   
-  try {
-    // Load FFmpeg WASM
-    console.log('Loading FFmpeg WASM...');
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-    const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
-    const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
-    
-    await ffmpeg.load({
-      coreURL,
-      wasmURL,
-    });
-    console.log('FFmpeg loaded successfully');
-
-    // Write input video to FFmpeg's virtual file system
-    const inputFilename = 'input.webm';
-    const outputFilename = 'output.webm';
-    
-    await ffmpeg.writeFile(inputFilename, videoData);
-    console.log('Input video written to FFmpeg filesystem');
-
-    // Calculate duration for trimming
-    const duration = trimEnd - trimStart;
-    
-    // Execute FFmpeg command to trim the video
-    console.log(`Executing FFmpeg trim command: -ss ${trimStart} -t ${duration}`);
-    await ffmpeg.exec([
-      '-i', inputFilename,
-      '-ss', trimStart.toString(),
-      '-t', duration.toString(),
-      '-c', 'copy', // Copy streams without re-encoding for speed
-      outputFilename
-    ]);
-    
-    // Read the processed video from FFmpeg's virtual file system
-    const processedData = await ffmpeg.readFile(outputFilename);
-    console.log('Video processing completed, output size:', processedData.length, 'bytes');
-    
-    // Convert FileData to Uint8Array
-    const result = new Uint8Array(processedData as ArrayBuffer);
-    
-    // Cleanup
-    await ffmpeg.deleteFile(inputFilename);
-    await ffmpeg.deleteFile(outputFilename);
-    
-    return result;
-    
-  } catch (error) {
-    console.error('FFmpeg processing error:', error);
-    throw new Error(`Video processing failed: ${error.message}`);
-  } finally {
-    try {
-      // Terminate FFmpeg instance to free memory
-      ffmpeg.terminate();
-    } catch (e) {
-      console.warn('Error terminating FFmpeg:', e);
-    }
-  }
+  // Return original video data - processing happens client-side
+  return videoData;
 }
 
 // Helper function to upload processed video to Supabase Storage

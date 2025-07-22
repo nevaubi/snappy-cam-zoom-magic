@@ -11,6 +11,8 @@ import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useClientVideoProcessor } from '@/hooks/useClientVideoProcessor';
+import { ProcessingProgress } from './ProcessingProgress';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -26,6 +28,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const trimmerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { processVideo, isProcessing, progress } = useClientVideoProcessor();
   
   // Export states
   const [isExporting, setIsExporting] = useState(false);
@@ -634,56 +637,32 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   // Export functionality
   const handleExport = async () => {
-    if (!src || isExporting) return;
+    if (!src || isProcessing) return;
 
-    setIsExporting(true);
     toast({
       title: "Starting export...",
-      description: "Processing your video with server-side FFmpeg",
+      description: "Processing your video with client-side FFmpeg",
     });
 
     try {
-      // Collect all video settings for processing
-      const exportSettings = {
-        videoUrl: src,
+      // Extract filename from URL for the processed video
+      const urlParts = src.split('/');
+      const originalFilename = urlParts[urlParts.length - 1] || 'video.webm';
+
+      // Process video client-side
+      const processedVideoUrl = await processVideo(
+        src,
         trimStart,
         trimEnd,
-        cropSettings: appliedCropSettings,
-        backgroundSettings: {
-          type: backgroundType,
-          color: backgroundColor,
-          image: backgroundImage,
-          imageFit: backgroundImageFit
-        },
-        displaySettings: {
-          padding: videoPadding,
-          cornerRadius: videoCornerRadius
-        },
-        zoomEffects: zoomEffects.length > 0 ? zoomEffects : null
-      };
+        originalFilename
+      );
 
-      // Call the Edge Function for processing
-      const { data, error } = await supabase.functions.invoke('process-video', {
-        body: exportSettings
-      });
-
-      if (error) throw error;
-
+      await downloadVideo(processedVideoUrl, 'processed-video.webm');
+      
       toast({
-        title: "Export completed!",
-        description: "Your processed video is ready for download",
+        title: "Export successful",
+        description: "Your video has been downloaded to your device",
       });
-
-      // Download the processed video
-      if (data.processedVideoUrl) {
-        await downloadVideo(data.processedVideoUrl, 'processed-video.webm');
-        toast({
-          title: "Export successful",
-          description: "Your video has been downloaded to your device",
-        });
-      } else {
-        throw new Error('No processed video URL received');
-      }
 
     } catch (error: any) {
       console.error('Export error:', error);
@@ -692,13 +671,22 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         description: error.message || "Something went wrong during video processing",
         variant: "destructive"
       });
-    } finally {
-      setIsExporting(false);
     }
   };
 
   return (
     <div className={cn("space-y-6", className)}>
+      {/* Processing Progress Overlay */}
+      {progress && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <ProcessingProgress
+            stage={progress.stage}
+            progress={progress.progress}
+            message={progress.message}
+          />
+        </div>
+      )}
+      
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
       <div className="grid lg:grid-cols-4 gap-6">
         {/* Left Column - Video Player (75%) */}
@@ -1188,12 +1176,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
         <Button
           onClick={handleExport}
-          disabled={isExporting || !src}
+          disabled={isProcessing || !src}
           variant="default"
           size="sm"
         >
           <Download className="h-4 w-4 mr-2" />
-          {isExporting ? 'Exporting...' : 'Export Video'}
+          {isProcessing ? 'Processing...' : 'Export Video'}
         </Button>
       </div>
 
