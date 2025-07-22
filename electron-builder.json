@@ -20,48 +20,25 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64", "ia32"]
+        "arch": ["x64"]
       },
       {
         "target": "portable",
-        "arch": ["x64", "ia32"]
-      }
-    ],
-    "icon": "public/favicon.ico"
-  },
-  "mac": {
-    "target": [
-      {
-        "target": "dmg",
-        "arch": ["x64", "arm64"]
-      },
-      {
-        "target": "zip",
-        "arch": ["x64", "arm64"]
-      }
-    ],
-    "icon": "public/favicon.ico",
-    "category": "public.app-category.video"
-  },
-  "linux": {
-    "target": [
-      {
-        "target": "AppImage",
-        "arch": ["x64"]
-      },
-      {
-        "target": "deb",
         "arch": ["x64"]
       }
     ],
     "icon": "public/favicon.ico",
-    "category": "AudioVideo"
+    "publisherName": "Snappy Cam",
+    "verifyUpdateCodeSignature": false
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
-    "createStartMenuShortcut": true
+    "createStartMenuShortcut": true,
+    "installerIcon": "public/favicon.ico",
+    "uninstallerIcon": "public/favicon.ico",
+    "installerHeaderIcon": "public/favicon.ico"
   },
   "publish": {
     "provider": "github",
