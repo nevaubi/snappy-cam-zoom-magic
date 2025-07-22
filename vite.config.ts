@@ -8,11 +8,6 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    headers: {
-      // Ensure proper headers for WASM files in dev
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-      'Cross-Origin-Opener-Policy': 'same-origin'
-    }
   },
   plugins: [
     react(),
@@ -23,10 +18,5 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-  },
-  build: {
-    // Ensure large assets are included
-    assetsInlineLimit: 0,
-    chunkSizeWarningLimit: 5000, // FFmpeg files are large
   },
 }));

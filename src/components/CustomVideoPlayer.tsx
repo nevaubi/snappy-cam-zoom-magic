@@ -2,29 +2,24 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Download } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
-import { useVideoProcessor } from '@/hooks/useVideoProcessor';
-import { toast } from 'sonner';
 
 interface CustomVideoPlayerProps {
   src: string;
   className?: string;
   onDurationLoad?: (duration: number) => void;
-  videoBlob?: Blob; // Add video blob for export processing
 }
 
 export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ 
   src, 
   className, 
-  onDurationLoad,
-  videoBlob
+  onDurationLoad 
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trimmerRef = useRef<HTMLDivElement>(null);
@@ -75,11 +70,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Track processed zoom effects to prevent duplicate updates
   const lastProcessedZoomRef = useRef<string | null>(null);
   const zoomOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Video processing for export
-  const { processVideo, loadFFmpeg } = useVideoProcessor();
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState(0);
   
   // Background color presets
   const colorPresets = [
@@ -609,67 +599,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
-  // Export functionality
-  const handleExport = async () => {
-    if (!videoBlob) {
-      toast.error('No video available for export');
-      return;
-    }
-
-    setIsExporting(true);
-    setExportProgress(0);
-
-    try {
-      // Load FFmpeg first
-      await loadFFmpeg();
-      toast.success('Processing video...');
-
-      // Prepare export options matching the current visual state
-      const exportOptions = {
-        trimStart,
-        trimEnd,
-        cropX: appliedCropSettings.x,
-        cropY: appliedCropSettings.y,
-        cropWidth: appliedCropSettings.width,
-        cropHeight: appliedCropSettings.height,
-        padding: videoPadding,
-        cornerRadius: videoCornerRadius,
-        backgroundColor,
-        backgroundImage: backgroundType === 'image' ? backgroundImage : null,
-        backgroundImageFit,
-        zoomEffects,
-        outputWidth: 1920,
-        outputHeight: 1080,
-        quality: 'high' as const
-      };
-
-      // Process the video
-      const processedBlob = await processVideo(
-        videoBlob,
-        exportOptions,
-        (progress) => setExportProgress(progress)
-      );
-
-      // Download the processed video
-      const url = URL.createObjectURL(processedBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `edited-video-${Date.now()}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast.success('Video exported successfully!');
-    } catch (error) {
-      console.error('Export failed:', error);
-      toast.error('Export failed. Please try again.');
-    } finally {
-      setIsExporting(false);
-      setExportProgress(0);
-    }
-  };
-
   return (
     <div className={cn("space-y-6", className)}>
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
@@ -1157,19 +1086,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         >
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
-        </Button>
-
-        <div className="flex-1" />
-
-        <Button
-          onClick={handleExport}
-          variant="default"
-          size="sm"
-          disabled={isExporting || !videoBlob}
-          className="relative"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          {isExporting ? `Exporting... ${Math.round(exportProgress)}%` : 'Export Video'}
         </Button>
       </div>
 
