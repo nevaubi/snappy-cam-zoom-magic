@@ -297,32 +297,38 @@ export class VideoExporter {
     // Apply background
     await this.renderBackground(backgroundColor, backgroundType, backgroundImage, backgroundImageFit);
 
-    // Calculate video dimensions with padding
-    const paddingPx = (videoPadding / 100) * Math.min(this.EXPORT_WIDTH, this.EXPORT_HEIGHT);
-    const videoWidth = this.EXPORT_WIDTH - (paddingPx * 2);
-    const videoHeight = this.EXPORT_HEIGHT - (paddingPx * 2);
+    // Calculate video dimensions with padding (matching preview scaling)
+    const paddingScale = (100 - videoPadding) / 100;
+    const videoWidth = this.EXPORT_WIDTH * paddingScale;
+    const videoHeight = this.EXPORT_HEIGHT * paddingScale;
+    const paddingX = (this.EXPORT_WIDTH - videoWidth) / 2;
+    const paddingY = (this.EXPORT_HEIGHT - videoHeight) / 2;
 
-    // Apply zoom effect
+    // Get active zoom effect
     const activeZoom = this.getActiveZoomEffect(zoomEffects, currentTime);
     
     this.ctx.save();
     
-    // Apply corner radius clipping
+    // Apply corner radius clipping path to match preview
     if (videoCornerRadius > 0) {
-      this.roundRect(paddingPx, paddingPx, videoWidth, videoHeight, videoCornerRadius);
+      this.roundRect(paddingX, paddingY, videoWidth, videoHeight, videoCornerRadius);
       this.ctx.clip();
     }
 
-    // Apply crop and zoom transforms
-    this.applyVideoTransforms(cropSettings, activeZoom, paddingPx, videoWidth, videoHeight);
+    // Apply transforms in the correct order to match preview
+    this.applyVideoTransforms(cropSettings, activeZoom, paddingX, paddingY, videoWidth, videoHeight);
 
-    // Draw video frame
+    // Calculate source coordinates from crop settings
+    const sourceX = (cropSettings.x / 100) * this.video.videoWidth;
+    const sourceY = (cropSettings.y / 100) * this.video.videoHeight;
+    const sourceWidth = (cropSettings.width / 100) * this.video.videoWidth;
+    const sourceHeight = (cropSettings.height / 100) * this.video.videoHeight;
+
+    // Draw video frame using 9-parameter drawImage for proper cropping
     this.ctx.drawImage(
       this.video,
-      paddingPx,
-      paddingPx,
-      videoWidth,
-      videoHeight
+      sourceX, sourceY, sourceWidth, sourceHeight,  // Source crop area
+      paddingX, paddingY, videoWidth, videoHeight   // Destination area
     );
 
     this.ctx.restore();
@@ -393,28 +399,15 @@ export class VideoExporter {
   private applyVideoTransforms(
     cropSettings: { x: number; y: number; width: number; height: number },
     activeZoom: ZoomEffect | null,
-    paddingPx: number,
+    paddingX: number,
+    paddingY: number,
     videoWidth: number,
     videoHeight: number
   ): void {
-    // Apply crop by adjusting source coordinates
-    const cropX = (cropSettings.x / 100) * this.video.videoWidth;
-    const cropY = (cropSettings.y / 100) * this.video.videoHeight;
-    const cropWidth = (cropSettings.width / 100) * this.video.videoWidth;
-    const cropHeight = (cropSettings.height / 100) * this.video.videoHeight;
+    // Move to the center of the video area first
+    this.ctx.translate(paddingX + videoWidth / 2, paddingY + videoHeight / 2);
 
-    // Apply zoom
-    if (activeZoom) {
-      const zoomAmount = activeZoom.zoomAmount;
-      const targetX = (activeZoom.targetX / 7) * videoWidth; // Convert from 7x7 grid to pixels
-      const targetY = (activeZoom.targetY / 7) * videoHeight;
-
-      this.ctx.translate(targetX, targetY);
-      this.ctx.scale(zoomAmount, zoomAmount);
-      this.ctx.translate(-targetX, -targetY);
-    }
-
-    // Apply crop centering transform
+    // Apply crop centering transform (matches getCenteringTransform)
     if (cropSettings.width < 100 || cropSettings.height < 100) {
       const cropCenterX = cropSettings.x + (cropSettings.width / 2);
       const cropCenterY = cropSettings.y + (cropSettings.height / 2);
@@ -422,10 +415,31 @@ export class VideoExporter {
       const offsetY = (50 - cropCenterY) * 2;
       
       this.ctx.translate(
-        (offsetX / 100) * videoWidth,
-        (offsetY / 100) * videoHeight
+        (offsetX / 100) * videoWidth / 2,
+        (offsetY / 100) * videoHeight / 2
       );
     }
+
+    // Apply zoom (matches zoom transform logic)
+    if (activeZoom) {
+      const zoomAmount = activeZoom.zoomAmount;
+      
+      // Calculate zoom origin (matches transformOrigin calculation)
+      const targetX = Math.max(10, Math.min(90, (activeZoom.targetX / 7) * 100));
+      const targetY = Math.max(10, Math.min(90, (activeZoom.targetY / 7) * 100));
+      
+      // Convert percentage to pixels relative to video center
+      const originX = ((targetX - 50) / 100) * videoWidth;
+      const originY = ((targetY - 50) / 100) * videoHeight;
+      
+      // Translate to zoom origin, scale, then translate back
+      this.ctx.translate(originX, originY);
+      this.ctx.scale(zoomAmount, zoomAmount);
+      this.ctx.translate(-originX, -originY);
+    }
+
+    // Move back to account for the video being drawn from top-left
+    this.ctx.translate(-videoWidth / 2, -videoHeight / 2);
   }
 
   private roundRect(x: number, y: number, width: number, height: number, radius: number): void {
