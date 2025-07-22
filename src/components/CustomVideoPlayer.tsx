@@ -11,6 +11,8 @@ import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
 import { useVideoProcessor } from '@/hooks/useVideoProcessor';
 import { useToast } from '@/hooks/use-toast';
+import { useScreenRecording } from '@/hooks/useScreenRecording';
+import type { QualityPreset } from '@/hooks/useScreenRecording';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -76,8 +78,22 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Export states
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  const [exportQuality, setExportQuality] = useState<QualityPreset>('high');
   const { processVideo } = useVideoProcessor();
   const { toast } = useToast();
+  
+  // Screen recording for export
+  const {
+    isRecording,
+    recordedBlob,
+    error: recordingError,
+    startRecording,
+    stopRecording,
+    downloadRecording
+  } = useScreenRecording();
+  
+  // Video container ref for screen recording
+  const videoContainerRef = useRef<HTMLDivElement>(null);
   
   // Background color presets
   const colorPresets = [
@@ -607,128 +623,44 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
-  // Function to extract video data from video element for external URLs
-  const extractVideoFromElement = async (videoElement: HTMLVideoElement): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('Canvas context not available'));
-        return;
-      }
-      
-      canvas.width = videoElement.videoWidth;
-      canvas.height = videoElement.videoHeight;
-      
-      const stream = canvas.captureStream();
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-      const chunks: Blob[] = [];
-      
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
-        }
-      };
-      
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        resolve(blob);
-      };
-      
-      mediaRecorder.onerror = (event) => {
-        reject(new Error('MediaRecorder error'));
-      };
-      
-      mediaRecorder.start();
-      
-      // Record the video by drawing frames to canvas
-      const fps = 30;
-      const interval = 1000 / fps;
-      let startTime = Date.now();
-      
-      const drawFrame = () => {
-        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-        
-        if (Date.now() - startTime < videoElement.duration * 1000) {
-          setTimeout(drawFrame, interval);
-        } else {
-          mediaRecorder.stop();
-        }
-      };
-      
-      videoElement.currentTime = 0;
-      videoElement.play();
-      drawFrame();
-    });
-  };
-
-  // Export function
+  // Screen recording export function
   const handleExport = async () => {
-    if (!src || isExporting) return;
+    if (!videoContainerRef.current || isExporting || isRecording) return;
     
     setIsExporting(true);
-    setExportProgress(0);
     
     try {
-      console.log('Starting export with settings:', {
-        videoPadding,
-        backgroundColor,
-        trimStart,
-        trimEnd
-      });
-      
       toast({
         title: "Export Started",
-        description: "Processing your video with padding and background..."
+        description: "Recording video with all effects applied..."
       });
       
-      // Get video blob - handle both blob URLs and external URLs
-      let videoBlob: Blob;
-      
-      if (src.startsWith('blob:')) {
-        // For blob URLs, use fetch (current working method)
-        console.log('Using fetch for blob URL');
-        const response = await fetch(src);
-        videoBlob = await response.blob();
-      } else {
-        // For external URLs, extract from video element to avoid CORS
-        console.log('Extracting video data from element for external URL');
-        if (!videoRef.current) {
-          throw new Error('Video element not available');
-        }
-        videoBlob = await extractVideoFromElement(videoRef.current);
+      // Reset video to trimmed start for recording
+      if (videoRef.current) {
+        videoRef.current.currentTime = trimStart;
+        setCurrentTime(trimStart);
       }
       
-      // Process video with only videoPadding and backgroundColor
-      const processedBlob = await processVideo(
-        videoBlob,
-        {
-          videoPadding,
-          backgroundColor,
-          // Add trimming if user has trimmed the video
-          ...(trimStart > 0 && { trimStart }),
-          ...(trimEnd < duration && trimEnd > 0 && { trimEnd })
-        },
-        (progress) => {
-          console.log('Export progress:', progress);
-          setExportProgress(progress);
-        }
-      );
+      // Start screen recording of the video container
+      await startRecording(videoContainerRef.current, exportQuality);
       
-      // Download the processed video
-      const url = URL.createObjectURL(processedBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `edited-video-${Date.now()}.webm`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      toast({
-        title: "Export Complete!",
-        description: "Your video has been processed and downloaded."
-      });
+      // Play the video for the trimmed duration
+      if (videoRef.current) {
+        await videoRef.current.play();
+        setIsPlaying(true);
+        
+        // Calculate recording duration based on trim settings
+        const recordingDuration = trimEnd > trimStart ? (trimEnd - trimStart) : duration;
+        
+        // Stop recording after the trimmed duration
+        setTimeout(() => {
+          stopRecording();
+          if (videoRef.current) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+          }
+        }, recordingDuration * 1000);
+      }
       
     } catch (error) {
       console.error('Export failed:', error);
@@ -737,11 +669,34 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         description: error instanceof Error ? error.message : "An error occurred during export",
         variant: "destructive"
       });
-    } finally {
       setIsExporting(false);
-      setExportProgress(0);
     }
   };
+  
+  // Handle download when recording is complete
+  useEffect(() => {
+    if (recordedBlob && isExporting) {
+      downloadRecording(`edited-video-${Date.now()}`);
+      setIsExporting(false);
+      
+      toast({
+        title: "Export Complete!",
+        description: "Your video has been recorded and downloaded."
+      });
+    }
+  }, [recordedBlob, isExporting, downloadRecording]);
+  
+  // Handle recording errors
+  useEffect(() => {
+    if (recordingError && isExporting) {
+      toast({
+        title: "Recording Failed",
+        description: recordingError,
+        variant: "destructive"
+      });
+      setIsExporting(false);
+    }
+  }, [recordingError, isExporting]);
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -750,6 +705,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         {/* Left Column - Video Player (75%) */}
         <div className="lg:col-span-3">
           <div 
+            ref={videoContainerRef}
             className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
             style={{
               ...(backgroundType === 'color' 
@@ -1232,16 +1188,28 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           Reset Trim
         </Button>
 
-        <Button
-          onClick={handleExport}
-          variant="default"
-          size="sm"
-          disabled={isExporting || !src}
-          className="ml-auto"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          {isExporting ? `Exporting... ${Math.round(exportProgress)}%` : 'Export Video'}
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <select 
+            value={exportQuality}
+            onChange={(e) => setExportQuality(e.target.value as QualityPreset)}
+            className="px-2 py-1 border border-input rounded text-xs bg-background"
+            disabled={isExporting}
+          >
+            <option value="standard">Standard (720p)</option>
+            <option value="high">High (1080p)</option>
+            <option value="ultra">Ultra (1440p)</option>
+          </select>
+          
+          <Button
+            onClick={handleExport}
+            variant="default"
+            size="sm"
+            disabled={isExporting || isRecording || !src}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {isExporting ? 'Recording...' : 'Export Video'}
+          </Button>
+        </div>
       </div>
 
       {duration > 0 && (
