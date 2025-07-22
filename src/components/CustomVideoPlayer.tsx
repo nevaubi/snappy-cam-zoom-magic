@@ -439,6 +439,11 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     const bottom = 100 - (crop.y + crop.height);
     const left = crop.x;
     
+    // Apply corner radius to cropped areas
+    if (videoCornerRadius > 0) {
+      return `inset(${top}% ${right}% ${bottom}% ${left}% round ${videoCornerRadius}px)`;
+    }
+    
     return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
   };
 
