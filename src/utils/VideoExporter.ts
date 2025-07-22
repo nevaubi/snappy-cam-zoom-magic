@@ -47,8 +47,8 @@ export class VideoExporter {
   // Export dimensions - fixed 1440p
   private readonly EXPORT_WIDTH = 2560;
   private readonly EXPORT_HEIGHT = 1440;
-  private readonly FPS = 60;
-  private readonly BITRATE = 8000000; // 8Mbps
+  private readonly FPS = 30; // Reduced from 60fps for better performance
+  private readonly BITRATE = 6000000; // 6Mbps, optimized for 30fps
 
   constructor() {
     // Create invisible canvas for export rendering
@@ -136,8 +136,8 @@ export class VideoExporter {
         message: 'Starting frame-by-frame rendering...'
       });
 
-      // Start recording
-      this.mediaRecorder.start(100); // 100ms chunks for smoother data flow
+      // Start recording with optimized chunk size for 30fps
+      this.mediaRecorder.start(200); // 200ms chunks, better for 30fps timing
 
       // Render frames
       await this.renderFrames(settings, onProgress);
@@ -198,34 +198,54 @@ export class VideoExporter {
     let currentTime = trimStart;
     let frameCount = 0;
     const totalFrames = Math.ceil(duration * this.FPS);
+    
+    // Track rendering performance
+    const startTime = performance.now();
+    let lastProgressUpdate = 0;
 
     while (currentTime < trimEnd && !this.shouldCancel) {
-      // Seek to current time
-      this.video.currentTime = currentTime;
-      
-      // Wait for seek to complete
-      await this.waitForSeek();
-      
-      // Render frame with all effects
-      await this.renderFrame(settings, currentTime);
-      
-      // Update progress
-      frameCount++;
-      const progress = 20 + (frameCount / totalFrames) * 75; // 20-95% range
-      
-      onProgress({
-        phase: 'processing',
-        progress: Math.min(95, progress),
-        currentTime,
-        totalTime: duration,
-        message: `Rendering frame ${frameCount} of ${totalFrames}...`
-      });
-      
-      currentTime += frameInterval;
-      
-      // Small delay to prevent browser blocking
-      if (frameCount % 30 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 1));
+      try {
+        // Seek to current time
+        this.video.currentTime = Math.min(currentTime, trimEnd - 0.001); // Prevent seeking past end
+        
+        // Wait for seek to complete with timeout
+        await this.waitForSeek();
+        
+        // Render frame with all effects
+        await this.renderFrame(settings, currentTime);
+        
+        frameCount++;
+        currentTime += frameInterval;
+        
+        // Update progress more efficiently (every 10 frames or 500ms)
+        const now = performance.now();
+        if (frameCount % 10 === 0 || now - lastProgressUpdate > 500) {
+          const progress = 20 + (frameCount / totalFrames) * 75; // 20-95% range
+          const elapsedSeconds = (now - startTime) / 1000;
+          const framesPerSecond = frameCount / elapsedSeconds;
+          const estimatedTotalTime = totalFrames / framesPerSecond;
+          const remainingTime = Math.max(0, estimatedTotalTime - elapsedSeconds);
+          
+          onProgress({
+            phase: 'processing',
+            progress: Math.min(95, progress),
+            currentTime,
+            totalTime: duration,
+            message: `Rendering frame ${frameCount}/${totalFrames} (~${Math.round(remainingTime)}s remaining)`
+          });
+          
+          lastProgressUpdate = now;
+        }
+        
+        // Reduce blocking with adaptive delay
+        if (frameCount % 15 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 1));
+        }
+      } catch (error) {
+        console.warn(`Frame ${frameCount} rendering issue:`, error);
+        // Skip problematic frame and continue
+        frameCount++;
+        currentTime += frameInterval;
       }
     }
 
@@ -235,14 +255,26 @@ export class VideoExporter {
   }
 
   private async waitForSeek(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const maxAttempts = 100; // Timeout after ~1.5 seconds
+      
       const checkSeek = () => {
         if (this.video.readyState >= 2) { // HAVE_CURRENT_DATA
           resolve();
+        } else if (attempts > maxAttempts) {
+          reject(new Error('Video seek timeout'));
         } else {
+          attempts++;
           requestAnimationFrame(checkSeek);
         }
       };
+      
+      // Use fastSeek for better performance if available
+      if ('fastSeek' in this.video) {
+        (this.video as any).fastSeek(this.video.currentTime);
+      }
+      
       checkSeek();
     });
   }
