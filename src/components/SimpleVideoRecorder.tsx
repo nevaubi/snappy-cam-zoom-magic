@@ -50,6 +50,7 @@ const QUALITY_PRESETS: Record<QualityPreset, QualityConfig> = {
 const SimpleVideoRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string>('');
+  const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
   const [quality, setQuality] = useState<QualityPreset>('high');
   const [error, setError] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
@@ -125,6 +126,7 @@ const SimpleVideoRecorder = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
         const url = URL.createObjectURL(blob);
         setRecordedVideoUrl(url);
+        setRecordedVideoBlob(blob);
         setIsRecording(false);
         
         // Upload to Supabase
@@ -318,7 +320,7 @@ const SimpleVideoRecorder = () => {
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <h3 className="text-sm font-medium">Cloud Video Ready</h3>
               </div>
-              <CustomVideoPlayer src={supabaseVideoUrl} className="w-full" />
+              <CustomVideoPlayer src={supabaseVideoUrl} videoBlob={recordedVideoBlob} className="w-full" />
             </div>
           ) : recordedVideoUrl && !isUploading ? (
             <div className="space-y-2">
@@ -326,7 +328,7 @@ const SimpleVideoRecorder = () => {
                 <AlertCircle className="w-4 h-4 text-yellow-500" />
                 <h3 className="text-sm font-medium">Local Video (Upload Failed)</h3>
               </div>
-              <CustomVideoPlayer src={recordedVideoUrl} className="w-full" />
+              <CustomVideoPlayer src={recordedVideoUrl} videoBlob={recordedVideoBlob} className="w-full" />
             </div>
           ) : null}
 
