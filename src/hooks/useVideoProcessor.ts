@@ -52,16 +52,39 @@ export const useVideoProcessor = () => {
         const ffmpeg = new FFmpeg();
         ffmpegInstance = ffmpeg;
 
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        });
+        // Multiple CDN fallbacks with correct version
+        const cdnUrls = [
+          'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd',
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd',
+          'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg.js/0.12.10/umd'
+        ];
 
-        isFFmpegLoaded = true;
-        console.log('FFmpeg loaded successfully');
+        let lastError: Error | null = null;
+        
+        for (const baseURL of cdnUrls) {
+          try {
+            console.log(`Trying to load FFmpeg from: ${baseURL}`);
+            await ffmpeg.load({
+              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            });
+            
+            isFFmpegLoaded = true;
+            console.log('FFmpeg loaded successfully from:', baseURL);
+            return;
+          } catch (error) {
+            console.warn(`Failed to load from ${baseURL}:`, error);
+            lastError = error as Error;
+            continue;
+          }
+        }
+
+        throw new Error(`Failed to load FFmpeg from all CDN sources. Last error: ${lastError?.message}`);
       } catch (error) {
-        console.error('FFmpeg loading failed:', error);
+        console.error('FFmpeg loading failed completely:', error);
+        ffmpegInstance = null;
+        isFFmpegLoaded = false;
+        loadingPromise = null;
         throw error;
       }
     })();
