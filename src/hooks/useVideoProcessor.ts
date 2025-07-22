@@ -35,11 +35,11 @@ export const useVideoProcessor = () => {
         const ffmpeg = new FFmpeg();
         ffmpegInstance = ffmpeg;
 
-        // Multiple CDN fallbacks for reliability
+        // Multiple CDN fallbacks for reliability - using version 0.12.6 that actually exists
         const cdnOptions = [
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.15/dist/umd',
-          'https://unpkg.com/@ffmpeg/core@0.12.15/dist/umd',
-          'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.15/dist/umd'
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
+          'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
+          'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg-core/0.12.10/umd'
         ];
 
         let loadSuccess = false;
