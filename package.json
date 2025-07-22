@@ -1,5 +1,7 @@
 {
   "name": "vite_react_shadcn_ts",
+  "main": "electron/main.js",
+  "homepage": "./",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,6 +10,10 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "electron:dev": "node scripts/electron-dev.js",
+    "electron:build": "node scripts/build-electron.js",
+    "electron:pack": "npm run build && electron-builder --publish=never",
+    "electron:dist": "npm run build && electron-builder --publish=always",
     "preview": "vite preview"
   },
   "dependencies": {
