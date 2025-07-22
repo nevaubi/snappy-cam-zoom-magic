@@ -2,15 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Download, Video } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
-import { ScreenRecordingExporter, RecordingProgress } from '@/utils/ScreenRecordingExporter';
-import { useToast } from '@/hooks/use-toast';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -72,13 +70,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Track processed zoom effects to prevent duplicate updates
   const lastProcessedZoomRef = useRef<string | null>(null);
   const zoomOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Recording states
-  const [isRecordingMode, setIsRecordingMode] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [recordingProgress, setRecordingProgress] = useState<RecordingProgress | null>(null);
-  const [screenRecorder] = useState(() => new ScreenRecordingExporter());
-  const { toast } = useToast();
   
   // Background color presets
   const colorPresets = [
@@ -491,95 +482,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     setSelectedZoomId(newZoom.id);
   };
 
-  // Export functionality
-  const toggleRecordingMode = () => {
-    setIsRecordingMode(!isRecordingMode);
-  };
-
-  const startVideoExport = async () => {
-    if (!screenRecorder.isSupported()) {
-      toast({
-        title: "Export Not Supported",
-        description: "Screen recording is not supported in your browser.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      setIsExporting(true);
-      const exportDuration = trimEnd - trimStart;
-      
-      toast({
-        title: "Preparing Export",
-        description: "Please select the video area when prompted and click 'Share' to start recording.",
-      });
-
-      // Enter fullscreen recording mode
-      setIsRecordingMode(true);
-      
-      // Wait a moment for the UI to update
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Start recording with progress callback
-      await screenRecorder.startRecording(exportDuration, (progress) => {
-        setRecordingProgress(progress);
-        
-        if (progress.status === 'recording' && progress.recordingTime === 0) {
-          // Start video playback when recording begins
-          handleVideoPlaybackForRecording();
-        }
-      });
-
-      // Wait for recording to complete
-      const recordedBlob = await screenRecorder.stopRecording();
-      
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      const filename = `exported-video-${timestamp}.webm`;
-      
-      // Download the recorded video
-      await screenRecorder.exportToFile(recordedBlob, filename);
-      
-      toast({
-        title: "Export Complete",
-        description: `Video exported as ${filename}`,
-      });
-
-    } catch (error) {
-      console.error('Export failed:', error);
-      toast({
-        title: "Export Failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-        variant: "destructive"
-      });
-    } finally {
-      setIsExporting(false);
-      setIsRecordingMode(false);
-      setRecordingProgress(null);
-    }
-  };
-
-  const handleVideoPlaybackForRecording = async () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    try {
-      // Seek to trim start
-      video.currentTime = trimStart;
-      setCurrentTime(trimStart);
-      
-      // Wait a moment for seek to complete
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      // Start playback
-      await video.play();
-      setIsPlaying(true);
-    } catch (error) {
-      console.error('Error starting video playback for recording:', error);
-    }
-  };
-
   const updateZoomEffect = (updatedZoom: ZoomEffect) => {
     setZoomEffects(prev => prev.map(zoom => 
       zoom.id === updatedZoom.id ? updatedZoom : zoom
@@ -699,38 +601,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   return (
     <div className={cn("space-y-6", className)}>
-      {/* Recording Progress Overlay */}
-      {recordingProgress && recordingProgress.isRecording && (
-        <div className="fixed top-4 right-4 z-50 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-4 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-sm font-medium">Recording</span>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {Math.round(recordingProgress.recordingTime)}s / {Math.round(recordingProgress.totalDuration)}s
-            </div>
-          </div>
-          <div className="mt-2 w-48 bg-muted rounded-full h-2">
-            <div 
-              className="bg-red-500 h-2 rounded-full transition-all duration-300"
-              style={{ 
-                width: `${Math.min(100, (recordingProgress.recordingTime / recordingProgress.totalDuration) * 100)}%` 
-              }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
       <div className="grid lg:grid-cols-4 gap-6">
         {/* Left Column - Video Player (75%) */}
         <div className="lg:col-span-3">
           <div 
-            className={cn(
-              "relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300",
-              isRecordingMode && "ring-2 ring-red-500 ring-opacity-50"
-            )}
+            className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
             style={{
               ...(backgroundType === 'color' 
                 ? { backgroundColor } 
@@ -1211,34 +1087,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
         </Button>
-
-        <div className="flex items-center gap-2 ml-auto">
-          {!isRecordingMode ? (
-            <Button
-              onClick={startVideoExport}
-              disabled={isExporting || duration === 0}
-              variant="default"
-              size="sm"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              {isExporting ? 'Exporting...' : 'Export Video'}
-            </Button>
-          ) : (
-            <div className="flex items-center gap-2 text-sm">
-              <div className="flex items-center gap-2 px-3 py-1 bg-red-500/10 text-red-500 rounded-md border border-red-500/20">
-                <Video className="h-4 w-4 animate-pulse" />
-                Recording Mode
-              </div>
-              <Button
-                onClick={() => setIsRecordingMode(false)}
-                variant="outline"
-                size="sm"
-              >
-                Exit Recording
-              </Button>
-            </div>
-          )}
-        </div>
       </div>
 
       {duration > 0 && (
