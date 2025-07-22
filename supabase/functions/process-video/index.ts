@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { FFmpeg } from 'https://esm.sh/@ffmpeg/ffmpeg@0.12.15';
+import { fetchFile, toBlobURL } from 'https://esm.sh/@ffmpeg/util@0.12.2';
 
 // Define types for the video processing settings
 interface ExportSettings {
@@ -55,11 +57,7 @@ async function processVideoWithFFmpeg(
 ): Promise<Uint8Array> {
   console.log('Processing video with FFmpeg - trim from', trimStart, 'to', trimEnd);
   
-  // For Phase 2, we'll implement basic trim functionality
-  // Note: This is a simplified implementation - in production you'd want to use proper FFmpeg
-  // For now, we'll validate the trim parameters and return the original video
-  // This establishes the processing pipeline that can be enhanced with actual FFmpeg
-  
+  // Validate trim parameters
   if (trimStart >= trimEnd) {
     throw new Error('Invalid trim parameters: start time must be less than end time');
   }
@@ -67,11 +65,66 @@ async function processVideoWithFFmpeg(
   if (trimStart < 0) {
     throw new Error('Invalid trim parameters: start time cannot be negative');
   }
+
+  const ffmpeg = new FFmpeg();
   
-  // TODO: Implement actual FFmpeg processing here
-  // For Phase 2, we're setting up the infrastructure
-  console.log('Video processing completed (mock)');
-  return videoData;
+  try {
+    // Load FFmpeg WASM
+    console.log('Loading FFmpeg WASM...');
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
+    const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
+    
+    await ffmpeg.load({
+      coreURL,
+      wasmURL,
+    });
+    console.log('FFmpeg loaded successfully');
+
+    // Write input video to FFmpeg's virtual file system
+    const inputFilename = 'input.webm';
+    const outputFilename = 'output.webm';
+    
+    await ffmpeg.writeFile(inputFilename, videoData);
+    console.log('Input video written to FFmpeg filesystem');
+
+    // Calculate duration for trimming
+    const duration = trimEnd - trimStart;
+    
+    // Execute FFmpeg command to trim the video
+    console.log(`Executing FFmpeg trim command: -ss ${trimStart} -t ${duration}`);
+    await ffmpeg.exec([
+      '-i', inputFilename,
+      '-ss', trimStart.toString(),
+      '-t', duration.toString(),
+      '-c', 'copy', // Copy streams without re-encoding for speed
+      outputFilename
+    ]);
+    
+    // Read the processed video from FFmpeg's virtual file system
+    const processedData = await ffmpeg.readFile(outputFilename);
+    console.log('Video processing completed, output size:', processedData.length, 'bytes');
+    
+    // Convert FileData to Uint8Array
+    const result = new Uint8Array(processedData as ArrayBuffer);
+    
+    // Cleanup
+    await ffmpeg.deleteFile(inputFilename);
+    await ffmpeg.deleteFile(outputFilename);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('FFmpeg processing error:', error);
+    throw new Error(`Video processing failed: ${error.message}`);
+  } finally {
+    try {
+      // Terminate FFmpeg instance to free memory
+      ffmpeg.terminate();
+    } catch (e) {
+      console.warn('Error terminating FFmpeg:', e);
+    }
+  }
 }
 
 // Helper function to upload processed video to Supabase Storage
