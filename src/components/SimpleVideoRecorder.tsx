@@ -48,7 +48,11 @@ const QUALITY_PRESETS: Record<QualityPreset, QualityConfig> = {
   }
 };
 
-const SimpleVideoRecorder = () => {
+interface SimpleVideoRecorderProps {
+  onCloseSidebar?: () => void;
+}
+
+const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) => {
   const { user } = useAuth();
   const [isRecording, setIsRecording] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string>('');
@@ -321,7 +325,7 @@ const SimpleVideoRecorder = () => {
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <h3 className="text-sm font-medium">Cloud Video Ready</h3>
               </div>
-              <CustomVideoPlayer src={supabaseVideoUrl} className="w-full" />
+              <CustomVideoPlayer src={supabaseVideoUrl} className="w-full" onCloseSidebar={onCloseSidebar} />
             </div>
           ) : recordedVideoUrl && !isUploading ? (
             <div className="space-y-2">
@@ -329,7 +333,7 @@ const SimpleVideoRecorder = () => {
                 <AlertCircle className="w-4 h-4 text-yellow-500" />
                 <h3 className="text-sm font-medium">Local Video (Upload Failed)</h3>
               </div>
-              <CustomVideoPlayer src={recordedVideoUrl} className="w-full" />
+              <CustomVideoPlayer src={recordedVideoUrl} className="w-full" onCloseSidebar={onCloseSidebar} />
             </div>
           ) : null}
 

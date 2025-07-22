@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom';
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import SimpleVideoRecorder from '@/components/SimpleVideoRecorder';
 import { MyLibrary } from '@/components/MyLibrary';
 import { ScreenshotBeautifier } from '@/components/ScreenshotBeautifier';
@@ -9,8 +9,13 @@ import { useIsMobile } from '@/hooks/use-mobile';
 export function DashboardContent() {
   const location = useLocation();
   const isMobile = useIsMobile();
+  const { setOpen: setSidebarOpen } = useSidebar();
   const searchParams = new URLSearchParams(location.search);
   const currentTab = searchParams.get('tab') || 'recorder';
+  
+  const closeSidebar = () => {
+    setSidebarOpen(false);
+  };
 
   const renderTabContent = () => {
     switch (currentTab) {
@@ -30,7 +35,7 @@ export function DashboardContent() {
             </div>
           );
         }
-        return <SimpleVideoRecorder />;
+        return <SimpleVideoRecorder onCloseSidebar={closeSidebar} />;
       case 'beautifier':
         if (isMobile) {
           return (
@@ -49,7 +54,7 @@ export function DashboardContent() {
       case 'settings':
         return <UserSettings />;
       default:
-        return <SimpleVideoRecorder />;
+        return <SimpleVideoRecorder onCloseSidebar={closeSidebar} />;
     }
   };
 
