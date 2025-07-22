@@ -154,148 +154,122 @@ export const useVideoProcessor = () => {
     if (!ffmpegInstance) throw new Error('FFmpeg not loaded');
     const ffmpeg = ffmpegInstance;
 
-    // Get video metadata first
-    const videoElement = document.createElement('video');
-    videoElement.src = URL.createObjectURL(videoBlob);
-    await new Promise((resolve) => {
-      videoElement.onloadedmetadata = resolve;
-    });
-    
-    const originalWidth = videoElement.videoWidth;
-    const originalHeight = videoElement.videoHeight;
-    const videoDuration = videoElement.duration;
-    URL.revokeObjectURL(videoElement.src);
+    console.log('🎬 Starting video processing with options:', options);
 
-    // Output dimensions
-    const outputWidth = options.outputWidth || 1920;
-    const outputHeight = options.outputHeight || 1080;
+    const inputFileName = 'input.mp4';
+    const outputFileName = 'output.mp4';
 
-    // Write input video to FFmpeg
-    await ffmpeg.writeFile('input.webm', await fetchFile(videoBlob));
+    try {
+      // Write input file
+      await ffmpeg.writeFile(inputFileName, await fetchFile(videoBlob));
 
-    // Handle background image if provided
-    if (options.backgroundImage && options.backgroundImage.startsWith('data:')) {
-      const backgroundBlob = await fetch(options.backgroundImage).then(r => r.blob());
-      await ffmpeg.writeFile('background.jpg', await fetchFile(backgroundBlob));
-    }
+      // Output dimensions
+      const width = options.outputWidth || 1920;
+      const height = options.outputHeight || 1080;
 
-    // Build complex filter graph
-    const filterParts: string[] = [];
-    let videoInput = '[0:v]';
+      // Start with simple, working filter chain
+      let filterParts: string[] = [];
+      let videoStream = '[0:v]';
 
-    // Apply trim timing first (seeking and duration)
-    const trimStart = options.trimStart || 0;
-    let trimDuration = videoDuration;
-    if (options.trimEnd && options.trimEnd > trimStart) {
-      trimDuration = options.trimEnd - trimStart;
-    }
-
-    // Create background layer
-    let backgroundInput = '';
-    if (options.backgroundImage && options.backgroundImage.startsWith('data:')) {
-      // Scale background image to output size
-      backgroundInput = `[1:v]scale=${outputWidth}:${outputHeight}:force_original_aspect_ratio=increase,crop=${outputWidth}:${outputHeight}[bg];`;
-    } else {
-      // Create solid color background
-      const bgColor = options.backgroundColor || '#000000';
-      backgroundInput = `color=c=${bgColor}:size=${outputWidth}x${outputHeight}:duration=${trimDuration}[bg];`;
-    }
-    filterParts.push(backgroundInput);
-
-    // Apply crop to original video if specified
-    if (options.cropX !== undefined && options.cropY !== undefined && 
-        options.cropWidth !== undefined && options.cropHeight !== undefined) {
-      const cropW = Math.round(originalWidth * (options.cropWidth / 100));
-      const cropH = Math.round(originalHeight * (options.cropHeight / 100));
-      const cropX = Math.round(originalWidth * (options.cropX / 100));
-      const cropY = Math.round(originalHeight * (options.cropY / 100));
-      filterParts.push(`${videoInput}crop=${cropW}:${cropH}:${cropX}:${cropY}[cropped];`);
-      videoInput = '[cropped]';
-    }
-
-    // Apply zoom effects if present
-    if (options.zoomEffects && options.zoomEffects.length > 0) {
-      const zoomFilters = generateZoomFilters(options.zoomEffects, videoDuration, originalWidth, originalHeight);
-      if (zoomFilters) {
-        filterParts.push(`${videoInput}${zoomFilters}[zoomed];`);
-        videoInput = '[zoomed]';
+      // 1. Handle trimming with proper timing
+      const trimStart = options.trimStart || 0;
+      const trimEnd = options.trimEnd || 9999;
+      
+      if (trimStart > 0 || trimEnd < 9999) {
+        const duration = trimEnd - trimStart;
+        console.log(`📏 Trimming: ${trimStart}s to ${trimEnd}s (duration: ${duration}s)`);
+        filterParts.push(`${videoStream}trim=start=${trimStart}:duration=${duration},setpts=PTS-STARTPTS[trimmed]`);
+        videoStream = '[trimmed]';
       }
+
+      // 2. Apply crop if needed (only if significantly different from default)
+      const hasSignificantCrop = options.cropX !== undefined && options.cropY !== undefined && 
+          options.cropWidth !== undefined && options.cropHeight !== undefined &&
+          (Math.abs(options.cropX || 0) > 1 || Math.abs(options.cropY || 0) > 1 || 
+           Math.abs((options.cropWidth || 100) - 100) > 1 || Math.abs((options.cropHeight || 100) - 100) > 1);
+
+      if (hasSignificantCrop) {
+        console.log(`✂️ Cropping: ${options.cropX}%, ${options.cropY}%, ${options.cropWidth}% x ${options.cropHeight}%`);
+        filterParts.push(`${videoStream}crop=iw*${(options.cropWidth || 100)/100}:ih*${(options.cropHeight || 100)/100}:iw*${(options.cropX || 0)/100}:ih*${(options.cropY || 0)/100}[cropped]`);
+        videoStream = '[cropped]';
+      }
+
+      // 3. Scale video to fit output dimensions while maintaining aspect ratio
+      console.log(`📐 Scaling to ${width}x${height}`);
+      filterParts.push(`${videoStream}scale=${width}:${height}:force_original_aspect_ratio=decrease[scaled]`);
+      videoStream = '[scaled]';
+
+      // 4. Create background and overlay
+      const bgColor = options.backgroundColor || '#000000';
+      const cleanBgColor = bgColor.replace('#', '');
+      console.log(`🎨 Background color: ${cleanBgColor}`);
+      
+      if (options.backgroundImage && options.backgroundImage.startsWith('data:')) {
+        console.log('🖼️ Using background image');
+        const bgFileName = 'bg.jpg';
+        try {
+          const response = await fetch(options.backgroundImage);
+          const bgBlob = await response.blob();
+          await ffmpeg.writeFile(bgFileName, await fetchFile(bgBlob));
+          
+          // Create background from image and overlay video
+          filterParts.push(`[1:v]scale=${width}:${height}[bg]`);
+          filterParts.push(`[bg]${videoStream}overlay=(W-w)/2:(H-h)/2[final]`);
+        } catch (bgError) {
+          console.warn('Failed to load background image, using color instead:', bgError);
+          filterParts.push(`color=c=${cleanBgColor}:size=${width}x${height}[bg]`);
+          filterParts.push(`[bg]${videoStream}overlay=(W-w)/2:(H-h)/2[final]`);
+        }
+      } else {
+        // Use solid color background
+        filterParts.push(`color=c=${cleanBgColor}:size=${width}x${height}[bg]`);
+        filterParts.push(`[bg]${videoStream}overlay=(W-w)/2:(H-h)/2[final]`);
+      }
+
+      const filterComplex = filterParts.join('; ');
+      console.log('🔧 Filter complex:', filterComplex);
+      
+      // Build FFmpeg command args
+      const args = [
+        '-i', inputFileName,
+        ...(options.backgroundImage && options.backgroundImage.startsWith('data:') ? ['-i', 'bg.jpg'] : []),
+        '-filter_complex', filterComplex,
+        '-map', '[final]',
+        '-map', '0:a?', // Copy audio if present
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '23',
+        '-y',
+        outputFileName
+      ];
+
+      console.log('🚀 FFmpeg command:', args.join(' '));
+
+      // Execute FFmpeg
+      await ffmpeg.exec(args);
+
+      console.log('✅ FFmpeg processing completed');
+
+      // Read output file
+      const data = await ffmpeg.readFile(outputFileName);
+      
+      // Cleanup
+      await ffmpeg.deleteFile(inputFileName);
+      await ffmpeg.deleteFile(outputFileName);
+      if (options.backgroundImage && options.backgroundImage.startsWith('data:')) {
+        try {
+          await ffmpeg.deleteFile('bg.jpg');
+        } catch (e) {
+          console.warn('Could not delete bg.jpg:', e);
+        }
+      }
+
+      console.log('🎉 Video processing successful, output size:', (data as Uint8Array).length);
+      return new Blob([data], { type: 'video/mp4' });
+    } catch (error) {
+      console.error('❌ Video processing error:', error);
+      throw error;
     }
-
-    // Calculate video dimensions with padding
-    const padding = options.padding || 0;
-    const paddingPx = Math.round((padding / 100) * Math.min(outputWidth, outputHeight));
-    const videoWidth = outputWidth - (paddingPx * 2);
-    const videoHeight = outputHeight - (paddingPx * 2);
-
-    // Scale video to fit within padded area
-    filterParts.push(`${videoInput}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=decrease[scaled];`);
-
-    // Apply corner radius if specified
-    if (options.cornerRadius && options.cornerRadius > 0) {
-      const radius = options.cornerRadius;
-      // Create rounded corner mask
-      filterParts.push(`[scaled]geq='if(lte(lum(X,Y),16),0,255)':128:128[rounded];`);
-      videoInput = '[rounded]';
-    } else {
-      videoInput = '[scaled]';
-    }
-
-    // Overlay video on background with padding
-    filterParts.push(`[bg]${videoInput}overlay=(W-w)/2:(H-h)/2[final]`);
-
-    // Build FFmpeg command
-    const args = ['-i', 'input.webm'];
-    
-    // Add background image input if present
-    if (options.backgroundImage && options.backgroundImage.startsWith('data:')) {
-      args.push('-i', 'background.jpg');
-    }
-
-    // Add seek and duration
-    args.push('-ss', `${trimStart}s`);
-    args.push('-t', `${trimDuration}s`);
-
-    // Add complex filter
-    args.push('-filter_complex', filterParts.join(''));
-    args.push('-map', '[final]');
-    args.push('-map', '0:a?'); // Copy audio if present
-
-    // Quality settings
-    const quality = options.quality || 'high';
-    if (quality === 'high') {
-      args.push('-crf', '18');
-    } else if (quality === 'medium') {
-      args.push('-crf', '23');
-    } else {
-      args.push('-crf', '28');
-    }
-    
-    args.push('-c:v', 'libx264', '-preset', 'medium', '-c:a', 'aac', 'output.mp4');
-
-    // Set up progress monitoring
-    if (onProgress) {
-      ffmpeg.on('progress', (event) => {
-        onProgress(event.progress * 100);
-      });
-    }
-
-    console.log('FFmpeg command:', args.join(' '));
-    
-    // Execute FFmpeg command
-    await ffmpeg.exec(args);
-    
-    // Read the output
-    const data = await ffmpeg.readFile('output.mp4');
-    
-    // Clean up
-    await ffmpeg.deleteFile('input.webm');
-    await ffmpeg.deleteFile('output.mp4');
-    if (options.backgroundImage && options.backgroundImage.startsWith('data:')) {
-      await ffmpeg.deleteFile('background.jpg');
-    }
-    
-    return new Blob([data], { type: 'video/mp4' });
   }, [loadFFmpeg]);
 
   // Helper function to generate zoom effect filters
