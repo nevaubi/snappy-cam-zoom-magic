@@ -4,8 +4,6 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
-import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
@@ -89,8 +87,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   // Default background images
   const defaultImages = [
-    { name: 'Ocean Wave', src: bgOceanWave },
-    { name: 'Living Room', src: bgLivingRoom },
+    { name: 'Preset 1', url: '/preset1.webp' },
+    { name: 'Preset 2', url: '/preset2.webp' },
+    { name: 'Preset 3', url: '/preset3.webp' },
+    { name: 'Preset 4', url: '/preset4.webp' },
+    { name: 'Preset 5', url: '/preset5.webp' },
+    { name: 'Preset 6', url: '/preset6.webp' }
   ];
   
   // Use refs to store current values for stable callbacks
@@ -869,16 +871,16 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                       {/* Default images */}
                       <div>
                         <label className="text-xs text-muted-foreground mb-2 block">Default Images</label>
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-6 gap-2">
                           {defaultImages.map((image) => (
                             <button
                               key={image.name}
-                              onClick={() => selectDefaultImage(image.src)}
+                              onClick={() => selectDefaultImage(image.url)}
                               className={cn(
-                                "w-16 h-16 rounded-md border-2 transition-all duration-200 hover:scale-105 bg-cover bg-center",
-                                backgroundImage === image.src ? "border-primary shadow-lg scale-105" : "border-border hover:border-muted-foreground"
+                                "w-10 h-10 rounded-md border-2 transition-all duration-200 hover:scale-105 bg-cover bg-center",
+                                backgroundImage === image.url ? "border-primary shadow-lg scale-105" : "border-border hover:border-muted-foreground"
                               )}
-                              style={{ backgroundImage: `url(${image.src})` }}
+                              style={{ backgroundImage: `url(${image.url})` }}
                               title={image.name}
                               aria-label={`Set background to ${image.name}`}
                             />
@@ -900,7 +902,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                               className="hidden"
                             />
                           </label>
-                          {backgroundImage && !defaultImages.some(img => img.src === backgroundImage) && (
+                          {backgroundImage && !defaultImages.some(img => img.url === backgroundImage) && (
                             <Button 
                               variant="outline" 
                               size="sm" 
