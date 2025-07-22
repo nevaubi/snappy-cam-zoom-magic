@@ -59,24 +59,8 @@ export function DashboardContent() {
   };
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header with sidebar trigger */}
-      <header className="h-12 flex items-center border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
-        <SidebarTrigger />
-        <div className="ml-4">
-          <h1 className="text-lg font-semibold capitalize">
-            {currentTab === 'recorder' ? 'Screen Recorder' : 
-             currentTab === 'library' ? 'My Library' :
-             currentTab === 'beautifier' ? 'Screenshot Beautifier' :
-             currentTab === 'settings' ? 'Settings' : 'Dashboard'}
-          </h1>
-        </div>
-      </header>
-
-      {/* Main content */}
-      <div className="flex-1 overflow-auto">
-        {renderTabContent()}
-      </div>
+    <div className="h-screen overflow-auto">
+      {renderTabContent()}
     </div>
   );
 }

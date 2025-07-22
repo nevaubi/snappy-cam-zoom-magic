@@ -87,11 +87,14 @@ export function AppSidebar() {
   return (
     <Sidebar className={state === 'collapsed' ? 'w-14' : 'w-60'} collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-2 px-4 py-2">
-          <Camera className="h-6 w-6 text-accent-glow" />
-          {state !== 'collapsed' && (
-            <span className="font-bold text-lg">SnapCam</span>
-          )}
+        <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center gap-2">
+            <Camera className="h-6 w-6 text-accent-glow" />
+            {state !== 'collapsed' && (
+              <span className="font-bold text-lg">SnapCam</span>
+            )}
+          </div>
+          <SidebarTrigger />
         </div>
       </SidebarHeader>
 
