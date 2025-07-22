@@ -121,7 +121,7 @@ export const VideoExportButton: React.FC<VideoExportButtonProps> = ({
         disabled={!videoBlob || isExporting}
         size="lg"
         className="w-full"
-        variant={exportStatus === 'success' ? 'default' : exportStatus === 'error' ? 'destructive' : 'primary'}
+        variant={exportStatus === 'success' ? 'default' : exportStatus === 'error' ? 'destructive' : 'default'}
       >
         {isExporting ? (
           <>
