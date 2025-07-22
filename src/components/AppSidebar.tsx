@@ -87,7 +87,7 @@ export function AppSidebar() {
   return (
     <Sidebar className={state === 'collapsed' ? 'w-14' : 'w-60'} collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center justify-between px-4 py-2">
+        <div className={`flex items-center py-2 ${state === 'collapsed' ? 'justify-center' : 'justify-between px-4'}`}>
           {state !== 'collapsed' ? (
             <>
               <div className="flex items-center gap-2">
@@ -97,7 +97,7 @@ export function AppSidebar() {
               <SidebarTrigger />
             </>
           ) : (
-            <SidebarTrigger className="mx-auto" />
+            <SidebarTrigger />
           )}
         </div>
       </SidebarHeader>
@@ -129,7 +129,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
-        <div className="p-2 space-y-2">
+        <div className={state === 'collapsed' ? 'p-2' : 'p-2 space-y-2'}>
           {state !== 'collapsed' && user && (
             <div className="text-xs text-muted-foreground px-2 truncate">
               {user.email}
@@ -139,7 +139,7 @@ export function AppSidebar() {
             variant="ghost"
             size="sm"
             onClick={handleSignOut}
-            className="w-full justify-start"
+            className={`w-full ${state === 'collapsed' ? 'justify-center' : 'justify-start'}`}
           >
             <LogOut className="h-4 w-4" />
             {state !== 'collapsed' && <span className="ml-2">Sign Out</span>}
