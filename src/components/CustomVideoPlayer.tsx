@@ -34,7 +34,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   
   // Screen capture hook
-  const { getTabStream, cropToPreview, startRecording, stopRecording, isSupported, cleanup } = useScreenCapture();
+  const { getTabStream, cropToPreview, startRecording, stopRecording, isSupported, cleanup, createPopupExport } = useScreenCapture();
   
   // Video display styling states
   const [videoPadding, setVideoPadding] = useState(0);
@@ -605,10 +605,37 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     try {
       setIsExporting(true);
       
+      // Check if we need popup fallback (no CropTarget support or failed)
+      const needsPopupFallback = !('CropTarget' in window);
+      
+      if (needsPopupFallback) {
+        toast({
+          title: "Using Popup Export",
+          description: "Opening video in new window for precise capture.",
+        });
+
+        // Use popup fallback method
+        const video = videoRef.current;
+        if (video) {
+          // Set video to trim start
+          video.currentTime = trimStart;
+          setCurrentTime(trimStart);
+          
+          const filename = `video-export-${Date.now()}.webm`;
+          await createPopupExport(video, filename);
+        }
+        
+        setIsExporting(false);
+        return;
+      }
+
       toast({
         title: "Screen Capture Starting",
         description: "Please select 'This tab' when prompted and ensure this tab remains visible during recording.",
       });
+
+      // Reset popup fallback flag
+      (window as any)._needsPopupFallback = false;
 
       // Get screen capture stream
       const stream = await getTabStream();
@@ -617,6 +644,30 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       // Apply crop target to the video element if supported
       if (videoRef.current) {
         await cropToPreview(videoTrack, videoRef.current);
+      }
+
+      // Check if we detected the need for popup fallback during crop
+      if ((window as any)._needsPopupFallback) {
+        toast({
+          title: "Switching to Popup Export",
+          description: "Region capture failed. Using popup method instead.",
+        });
+
+        // Cleanup current stream
+        stream.getTracks().forEach(track => track.stop());
+
+        // Use popup fallback method
+        const video = videoRef.current;
+        if (video) {
+          video.currentTime = trimStart;
+          setCurrentTime(trimStart);
+          
+          const filename = `video-export-${Date.now()}.webm`;
+          await createPopupExport(video, filename);
+        }
+        
+        setIsExporting(false);
+        return;
       }
 
       // Pause current playback
@@ -668,7 +719,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       });
       setIsExporting(false);
     }
-  }, [isSupported, isExporting, getTabStream, cropToPreview, isPlaying, handlePause, handlePlay, trimStart, trimEnd, startRecording, stopRecording, formatTime]);
+  }, [isSupported, isExporting, getTabStream, cropToPreview, createPopupExport, isPlaying, handlePause, handlePlay, trimStart, trimEnd, startRecording, stopRecording, formatTime]);
 
   // Zoom presets data
   const zoomAmounts = [
