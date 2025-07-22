@@ -47,8 +47,8 @@ export class VideoExporter {
   // Export dimensions - fixed 1440p
   private readonly EXPORT_WIDTH = 2560;
   private readonly EXPORT_HEIGHT = 1440;
-  private readonly FPS = 30; // Reduced from 60fps for better performance
-  private readonly BITRATE = 6000000; // 6Mbps, optimized for 30fps
+  private readonly FPS = 60; // Increased to 60fps for smooth zoom animations
+  private readonly BITRATE = 8000000; // 8Mbps for higher quality
 
   constructor() {
     // Create invisible canvas for export rendering
@@ -136,8 +136,8 @@ export class VideoExporter {
         message: 'Starting frame-by-frame rendering...'
       });
 
-      // Start recording with optimized chunk size for 30fps
-      this.mediaRecorder.start(200); // 200ms chunks, better for 30fps timing
+      // Start recording with optimized chunk size for 60fps
+      this.mediaRecorder.start(100); // 100ms chunks for 60fps timing
 
       // Render frames
       await this.renderFrames(settings, onProgress);
@@ -217,29 +217,33 @@ export class VideoExporter {
         frameCount++;
         currentTime += frameInterval;
         
-        // Update progress more efficiently (every 10 frames or 500ms)
+        // Update progress more efficiently (every 15 frames or 300ms for 60fps)
         const now = performance.now();
-        if (frameCount % 10 === 0 || now - lastProgressUpdate > 500) {
+        if (frameCount % 15 === 0 || now - lastProgressUpdate > 300) {
           const progress = 20 + (frameCount / totalFrames) * 75; // 20-95% range
           const elapsedSeconds = (now - startTime) / 1000;
           const framesPerSecond = frameCount / elapsedSeconds;
           const estimatedTotalTime = totalFrames / framesPerSecond;
           const remainingTime = Math.max(0, estimatedTotalTime - elapsedSeconds);
           
+          // Show zoom effect being processed
+          const activeZoom = this.getActiveZoomEffect(settings.zoomEffects, currentTime);
+          const zoomMessage = activeZoom ? ` (Zoom ${activeZoom.zoomAmount}x active)` : '';
+          
           onProgress({
             phase: 'processing',
             progress: Math.min(95, progress),
             currentTime,
             totalTime: duration,
-            message: `Rendering frame ${frameCount}/${totalFrames} (~${Math.round(remainingTime)}s remaining)`
+            message: `Rendering frame ${frameCount}/${totalFrames}${zoomMessage} (~${Math.round(remainingTime)}s remaining)`
           });
           
           lastProgressUpdate = now;
         }
         
-        // Reduce blocking with adaptive delay
-        if (frameCount % 15 === 0) {
-          await new Promise(resolve => setTimeout(resolve, 1));
+        // Reduce blocking with adaptive delay optimized for 60fps
+        if (frameCount % 20 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 0.5));
         }
       } catch (error) {
         console.warn(`Frame ${frameCount} rendering issue:`, error);
@@ -257,16 +261,18 @@ export class VideoExporter {
   private async waitForSeek(): Promise<void> {
     return new Promise((resolve, reject) => {
       let attempts = 0;
-      const maxAttempts = 100; // Timeout after ~1.5 seconds
+      const maxAttempts = 150; // Increased timeout for better seeking accuracy
       
       const checkSeek = () => {
+        // Check if video has seeked to the correct time and has data
         if (this.video.readyState >= 2) { // HAVE_CURRENT_DATA
           resolve();
         } else if (attempts > maxAttempts) {
           reject(new Error('Video seek timeout'));
         } else {
           attempts++;
-          requestAnimationFrame(checkSeek);
+          // Use shorter intervals for more responsive seeking
+          setTimeout(checkSeek, 8); // ~8ms intervals for 120fps checking
         }
       };
       
@@ -311,23 +317,31 @@ export class VideoExporter {
     
     // Apply corner radius clipping path to match preview
     if (videoCornerRadius > 0) {
-      this.roundRect(paddingX, paddingY, videoWidth, videoHeight, videoCornerRadius);
+      const scaledRadius = (videoCornerRadius / 100) * Math.min(videoWidth, videoHeight) * 0.1;
+      this.roundRect(paddingX, paddingY, videoWidth, videoHeight, scaledRadius);
       this.ctx.clip();
     }
 
     // Apply transforms in the correct order to match preview
-    this.applyVideoTransforms(cropSettings, activeZoom, paddingX, paddingY, videoWidth, videoHeight);
+    const interpolatedZoom = activeZoom ? this.getInterpolatedZoom(activeZoom, currentTime) : null;
+    this.applyVideoTransforms(cropSettings, interpolatedZoom, paddingX, paddingY, videoWidth, videoHeight);
 
-    // Calculate source coordinates from crop settings
-    const sourceX = (cropSettings.x / 100) * this.video.videoWidth;
-    const sourceY = (cropSettings.y / 100) * this.video.videoHeight;
-    const sourceWidth = (cropSettings.width / 100) * this.video.videoWidth;
-    const sourceHeight = (cropSettings.height / 100) * this.video.videoHeight;
+    // Calculate source coordinates from crop settings - fixed coordinate system
+    const sourceX = Math.round((cropSettings.x / 100) * this.video.videoWidth);
+    const sourceY = Math.round((cropSettings.y / 100) * this.video.videoHeight);
+    const sourceWidth = Math.round((cropSettings.width / 100) * this.video.videoWidth);
+    const sourceHeight = Math.round((cropSettings.height / 100) * this.video.videoHeight);
+
+    // Ensure source dimensions are valid
+    const clampedSourceX = Math.max(0, Math.min(sourceX, this.video.videoWidth - 1));
+    const clampedSourceY = Math.max(0, Math.min(sourceY, this.video.videoHeight - 1));
+    const clampedSourceWidth = Math.max(1, Math.min(sourceWidth, this.video.videoWidth - clampedSourceX));
+    const clampedSourceHeight = Math.max(1, Math.min(sourceHeight, this.video.videoHeight - clampedSourceY));
 
     // Draw video frame using 9-parameter drawImage for proper cropping
     this.ctx.drawImage(
       this.video,
-      sourceX, sourceY, sourceWidth, sourceHeight,  // Source crop area
+      clampedSourceX, clampedSourceY, clampedSourceWidth, clampedSourceHeight,  // Source crop area
       paddingX, paddingY, videoWidth, videoHeight   // Destination area
     );
 
@@ -396,49 +410,111 @@ export class VideoExporter {
     ) || null;
   }
 
+  private getInterpolatedZoom(zoomEffect: ZoomEffect, currentTime: number): { amount: number; targetX: number; targetY: number } {
+    const progress = (currentTime - zoomEffect.startTime) / (zoomEffect.endTime - zoomEffect.startTime);
+    
+    // Use cubic-bezier easing to match CSS transitions: cubic-bezier(0.4, 0, 0.2, 1)
+    const easeProgress = this.cubicBezierEasing(progress, 0.4, 0, 0.2, 1);
+    
+    // Interpolate zoom amount based on zoom speed
+    let zoomAmount: number;
+    const effectDuration = zoomEffect.endTime - zoomEffect.startTime;
+    const zoomSpeed = Math.max(0.1, Math.min(2, zoomEffect.zoomSpeed));
+    
+    if (effectDuration <= 1) {
+      // Short effects: linear interpolation
+      zoomAmount = 1 + (zoomEffect.zoomAmount - 1) * easeProgress;
+    } else {
+      // Longer effects: consider zoom speed
+      const speedFactor = zoomSpeed;
+      const zoomInDuration = effectDuration * 0.4 * (1 / speedFactor);
+      const holdDuration = effectDuration * 0.2;
+      const zoomOutDuration = effectDuration * 0.4 * (1 / speedFactor);
+      
+      const relativeTime = progress * effectDuration;
+      
+      if (relativeTime <= zoomInDuration) {
+        // Zoom in phase
+        const zoomProgress = relativeTime / zoomInDuration;
+        zoomAmount = 1 + (zoomEffect.zoomAmount - 1) * this.cubicBezierEasing(zoomProgress, 0.4, 0, 0.2, 1);
+      } else if (relativeTime <= zoomInDuration + holdDuration) {
+        // Hold phase
+        zoomAmount = zoomEffect.zoomAmount;
+      } else {
+        // Zoom out phase
+        const zoomOutProgress = (relativeTime - zoomInDuration - holdDuration) / zoomOutDuration;
+        zoomAmount = zoomEffect.zoomAmount - (zoomEffect.zoomAmount - 1) * this.cubicBezierEasing(zoomOutProgress, 0.4, 0, 0.2, 1);
+      }
+    }
+
+    return {
+      amount: Math.max(1, zoomAmount),
+      targetX: zoomEffect.targetX,
+      targetY: zoomEffect.targetY
+    };
+  }
+
+  private cubicBezierEasing(t: number, x1: number, y1: number, x2: number, y2: number): number {
+    // Simplified cubic-bezier implementation for common easing curves
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    
+    // For the common ease curve (0.4, 0, 0.2, 1), use approximation
+    const c = 3 * x1;
+    const b = 3 * (x2 - x1) - c;
+    const a = 1 - c - b;
+    
+    const tSquared = t * t;
+    const tCubed = tSquared * t;
+    
+    return a * tCubed + b * tSquared + c * t;
+  }
+
   private applyVideoTransforms(
     cropSettings: { x: number; y: number; width: number; height: number },
-    activeZoom: ZoomEffect | null,
+    interpolatedZoom: { amount: number; targetX: number; targetY: number } | null,
     paddingX: number,
     paddingY: number,
     videoWidth: number,
     videoHeight: number
   ): void {
-    // Move to the center of the video area first
+    // Move to the center of the video area first (matches preview transform origin)
     this.ctx.translate(paddingX + videoWidth / 2, paddingY + videoHeight / 2);
 
-    // Apply crop centering transform (matches getCenteringTransform)
-    if (cropSettings.width < 100 || cropSettings.height < 100) {
+    // Apply crop centering transform exactly like getCenteringTransform in preview
+    if (cropSettings.width < 100 || cropSettings.height < 100 || cropSettings.x !== 0 || cropSettings.y !== 0) {
       const cropCenterX = cropSettings.x + (cropSettings.width / 2);
       const cropCenterY = cropSettings.y + (cropSettings.height / 2);
       const offsetX = (50 - cropCenterX) * 2;
       const offsetY = (50 - cropCenterY) * 2;
       
+      // Scale to match CSS percentage transform
       this.ctx.translate(
         (offsetX / 100) * videoWidth / 2,
         (offsetY / 100) * videoHeight / 2
       );
     }
 
-    // Apply zoom (matches zoom transform logic)
-    if (activeZoom) {
-      const zoomAmount = activeZoom.zoomAmount;
+    // Apply zoom transform exactly like preview CSS transform
+    if (interpolatedZoom && interpolatedZoom.amount > 1) {
+      const zoomAmount = interpolatedZoom.amount;
       
-      // Calculate zoom origin (matches transformOrigin calculation)
-      const targetX = Math.max(10, Math.min(90, (activeZoom.targetX / 7) * 100));
-      const targetY = Math.max(10, Math.min(90, (activeZoom.targetY / 7) * 100));
+      // Calculate zoom origin to match preview transformOrigin exactly
+      // Preview uses: (targetX / 7) * 100 then clamps to 10-90
+      const targetXPercent = Math.max(10, Math.min(90, (interpolatedZoom.targetX / 7) * 100));
+      const targetYPercent = Math.max(10, Math.min(90, (interpolatedZoom.targetY / 7) * 100));
       
-      // Convert percentage to pixels relative to video center
-      const originX = ((targetX - 50) / 100) * videoWidth;
-      const originY = ((targetY - 50) / 100) * videoHeight;
+      // Convert to canvas coordinates relative to video center
+      const originX = ((targetXPercent - 50) / 100) * videoWidth;
+      const originY = ((targetYPercent - 50) / 100) * videoHeight;
       
-      // Translate to zoom origin, scale, then translate back
+      // Apply zoom transform: translate to origin, scale, translate back
       this.ctx.translate(originX, originY);
       this.ctx.scale(zoomAmount, zoomAmount);
       this.ctx.translate(-originX, -originY);
     }
 
-    // Move back to account for the video being drawn from top-left
+    // Translate back to top-left for drawImage
     this.ctx.translate(-videoWidth / 2, -videoHeight / 2);
   }
 
