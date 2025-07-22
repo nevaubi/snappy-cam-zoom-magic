@@ -84,7 +84,7 @@ export const ZoomTimeline: React.FC<ZoomTimelineProps> = ({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-yellow-500 rounded-full" />
+          <div className="w-3 h-3 bg-accent rounded-full shadow-lg shadow-accent/30" />
           <span className="text-sm font-medium">
             Zoom {zoomEffect.zoomAmount}x
           </span>
@@ -102,14 +102,14 @@ export const ZoomTimeline: React.FC<ZoomTimelineProps> = ({
       
       <div 
         ref={timelineRef}
-        className="relative w-full h-8 bg-muted rounded cursor-pointer select-none"
+        className="relative w-full h-8 bg-muted/50 rounded cursor-pointer select-none shadow-inner"
       >
         {/* Background track */}
         <div className="absolute inset-0 bg-muted-foreground/10 rounded" />
         
         {/* Zoom effect range */}
         <div 
-          className="absolute top-0 bottom-0 bg-yellow-500/30 border-t-2 border-b-2 border-yellow-500 cursor-move"
+          className="absolute top-0 bottom-0 bg-accent/40 border-t-2 border-b-2 border-accent cursor-move shadow-lg shadow-accent/20"
           style={{
             left: `${(zoomEffect.startTime / duration) * 100}%`,
             width: `${((zoomEffect.endTime - zoomEffect.startTime) / duration) * 100}%`,
@@ -120,8 +120,8 @@ export const ZoomTimeline: React.FC<ZoomTimelineProps> = ({
         {/* Start handle */}
         <div 
           className={cn(
-            "absolute top-0 bottom-0 w-2 bg-yellow-500 rounded-l cursor-ew-resize z-10 hover:bg-yellow-600 transition-colors",
-            isDragging === 'start' && "bg-yellow-600"
+            "absolute top-0 bottom-0 w-2 bg-accent rounded-l cursor-ew-resize z-10 hover:bg-accent/80 transition-colors shadow-lg",
+            isDragging === 'start' && "bg-accent/80 scale-110"
           )}
           style={{
             left: `${(zoomEffect.startTime / duration) * 100}%`,
@@ -132,8 +132,8 @@ export const ZoomTimeline: React.FC<ZoomTimelineProps> = ({
         {/* End handle */}
         <div 
           className={cn(
-            "absolute top-0 bottom-0 w-2 bg-yellow-500 rounded-r cursor-ew-resize z-10 hover:bg-yellow-600 transition-colors",
-            isDragging === 'end' && "bg-yellow-600"
+            "absolute top-0 bottom-0 w-2 bg-accent rounded-r cursor-ew-resize z-10 hover:bg-accent/80 transition-colors shadow-lg",
+            isDragging === 'end' && "bg-accent/80 scale-110"
           )}
           style={{
             left: `${(zoomEffect.endTime / duration) * 100}%`,

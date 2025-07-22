@@ -673,10 +673,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                     borderRadius: `${videoCornerRadius}px`,
                   }}
                 >
-                  <div className="absolute inset-0 bg-black/50" />
+                  <div className="absolute inset-0 bg-black/70" />
                   
                   <div 
-                    className="absolute border-2 border-white bg-transparent"
+                    className="absolute border-2 border-primary bg-primary/10 shadow-lg shadow-primary/20"
                     style={{
                       left: `${cropSettings.x}%`,
                       top: `${cropSettings.y}%`,
@@ -686,48 +686,48 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                     onMouseDown={(e) => handleCropMouseDown(e, 'move')}
                   >
                     <div className="absolute inset-0">
-                      <div className="absolute left-1/3 top-0 w-px h-full bg-white/30" />
-                      <div className="absolute left-2/3 top-0 w-px h-full bg-white/30" />
-                      <div className="absolute top-1/3 left-0 h-px w-full bg-white/30" />
-                      <div className="absolute top-2/3 left-0 h-px w-full bg-white/30" />
+                      <div className="absolute left-1/3 top-0 w-px h-full bg-primary/50" />
+                      <div className="absolute left-2/3 top-0 w-px h-full bg-primary/50" />
+                      <div className="absolute top-1/3 left-0 h-px w-full bg-primary/50" />
+                      <div className="absolute top-2/3 left-0 h-px w-full bg-primary/50" />
                     </div>
                     
                     <div 
-                      className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-nw-resize"
+                      className="absolute -top-1 -left-1 w-3 h-3 bg-primary border-2 border-primary-foreground cursor-nw-resize shadow-lg"
                       onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
                     />
                     <div 
-                      className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-gray-300 cursor-ne-resize"
+                      className="absolute -top-1 -right-1 w-3 h-3 bg-primary border-2 border-primary-foreground cursor-ne-resize shadow-lg"
                       onMouseDown={(e) => handleCropMouseDown(e, 'ne')}
                     />
                     <div 
-                      className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-gray-300 cursor-sw-resize"
+                      className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary border-2 border-primary-foreground cursor-sw-resize shadow-lg"
                       onMouseDown={(e) => handleCropMouseDown(e, 'sw')}
                     />
                     <div 
-                      className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-gray-300 cursor-se-resize"
+                      className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary border-2 border-primary-foreground cursor-se-resize shadow-lg"
                       onMouseDown={(e) => handleCropMouseDown(e, 'se')}
                     />
                     
                     <div 
-                      className="absolute -top-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-n-resize transform -translate-x-1/2"
+                      className="absolute -top-1 left-1/2 w-3 h-2 bg-primary border-2 border-primary-foreground cursor-n-resize transform -translate-x-1/2 shadow-lg"
                       onMouseDown={(e) => handleCropMouseDown(e, 'n')}
                     />
                     <div 
-                      className="absolute -bottom-1 left-1/2 w-3 h-2 bg-white border border-gray-300 cursor-s-resize transform -translate-x-1/2"
+                      className="absolute -bottom-1 left-1/2 w-3 h-2 bg-primary border-2 border-primary-foreground cursor-s-resize transform -translate-x-1/2 shadow-lg"
                       onMouseDown={(e) => handleCropMouseDown(e, 's')}
                     />
                     <div 
-                      className="absolute -left-1 top-1/2 w-2 h-3 bg-white border border-gray-300 cursor-w-resize transform -translate-y-1/2"
+                      className="absolute -left-1 top-1/2 w-2 h-3 bg-primary border-2 border-primary-foreground cursor-w-resize transform -translate-y-1/2 shadow-lg"
                       onMouseDown={(e) => handleCropMouseDown(e, 'w')}
                     />
                     <div 
-                      className="absolute -right-1 top-1/2 w-2 h-3 bg-white border border-gray-300 cursor-e-resize transform -translate-y-1/2"
+                      className="absolute -right-1 top-1/2 w-2 h-3 bg-primary border-2 border-primary-foreground cursor-e-resize transform -translate-y-1/2 shadow-lg"
                       onMouseDown={(e) => handleCropMouseDown(e, 'e')}
                     />
                   </div>
                   
-                  <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-mono">
+                  <div className="absolute top-2 left-2 bg-primary/90 text-primary-foreground px-2 py-1 rounded text-xs font-mono shadow-lg">
                     {Math.round(cropSettings.width)}% × {Math.round(cropSettings.height)}%
                   </div>
                 </div>
@@ -739,14 +739,14 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         {/* Right Column - Tabbed Editing Controls Sidebar (25%) */}
         {showRightPanels && (
           <div className="lg:col-span-1">
-            <div className="bg-card/50 border border-border rounded-lg p-4 shadow-sm">
+            <div className="bg-card/80 border border-border rounded-lg p-4 shadow-lg shadow-primary/5">
             <Tabs defaultValue="display" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="display" className="flex items-center gap-2 text-xs">
+              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50">
+                <TabsTrigger value="display" className="flex items-center gap-2 text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
                   <Settings className="h-3 w-3" />
                   Display
                 </TabsTrigger>
-                <TabsTrigger value="zoom" className="flex items-center gap-2 text-xs">
+                <TabsTrigger value="zoom" className="flex items-center gap-2 text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
                   <ZoomIn className="h-3 w-3" />
                   Zoom
                 </TabsTrigger>
@@ -1123,7 +1123,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             <div className="absolute inset-0 bg-muted-foreground/20 rounded-lg" />
             
             <div 
-              className="absolute top-0 bottom-0 bg-primary/30 border-t-2 border-b-2 border-primary"
+              className="absolute top-0 bottom-0 bg-primary/40 border-t-2 border-b-2 border-primary shadow-lg shadow-primary/20"
               style={{
                 left: `${(trimStart / duration) * 100}%`,
                 width: `${((trimEnd - trimStart) / duration) * 100}%`,
@@ -1139,8 +1139,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             
             <div 
               className={cn(
-                "absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
-                isDragging === 'start' && "bg-primary/80"
+                "absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors shadow-lg shadow-primary/30",
+                isDragging === 'start' && "bg-primary/80 scale-110"
               )}
               style={{
                 left: `${(trimStart / duration) * 100}%`,
@@ -1152,8 +1152,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             
             <div 
               className={cn(
-                "absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
-                isDragging === 'end' && "bg-primary/80"
+                "absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors shadow-lg shadow-primary/30",
+                isDragging === 'end' && "bg-primary/80 scale-110"
               )}
               style={{
                 left: `${(trimEnd / duration) * 100}%`,

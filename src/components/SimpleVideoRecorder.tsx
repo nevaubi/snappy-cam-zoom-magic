@@ -252,6 +252,7 @@ const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) 
               onClick={isRecording ? stopRecording : startRecording}
               variant={isRecording ? "destructive" : "default"}
               size="default"
+              className={isRecording ? "shadow-lg shadow-destructive/25 animate-recording-pulse" : "shadow-lg shadow-primary/25"}
             >
               {isRecording ? (
                 <>
@@ -310,10 +311,10 @@ const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) 
 
           {/* Upload Progress */}
           {isUploading && (
-            <div className="space-y-2">
+            <div className="space-y-2 p-4 bg-primary/5 border border-primary/20 rounded-lg">
               <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 animate-spin" />
-                <span className="text-sm font-medium">Uploading to cloud storage...</span>
+                <Upload className="w-4 h-4 animate-spin text-primary" />
+                <span className="text-sm font-medium text-primary">Uploading to cloud storage...</span>
               </div>
               <Progress value={uploadProgress} className="w-full" />
             </div>
@@ -350,9 +351,9 @@ const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) 
 
           {/* Recording Status */}
           {isRecording && (
-            <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              Recording in progress at {currentConfig.name}...
+            <div className="mt-6 flex items-center gap-2 text-sm font-medium">
+              <div className="w-3 h-3 bg-recording rounded-full animate-recording-pulse shadow-lg shadow-recording/50" />
+              <span className="text-recording">Recording in progress at {currentConfig.name}...</span>
             </div>
           )}
         </Card>

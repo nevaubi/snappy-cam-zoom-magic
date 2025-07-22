@@ -24,10 +24,10 @@ export const ZoomPresets: React.FC<ZoomPresetsProps> = ({
             onClick={() => onSelect(option.value)}
             className={cn(
               "w-12 h-12 rounded-full border-2 transition-all duration-200 text-xs font-medium",
-              "hover:scale-105 active:scale-95",
+              "hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl",
               selectedValue === option.value
-                ? "border-yellow-500 bg-yellow-500/20 text-yellow-700 shadow-md"
-                : "border-border bg-background text-muted-foreground hover:border-yellow-300 hover:bg-yellow-50"
+                ? "border-primary bg-primary/20 text-primary shadow-lg shadow-primary/25"
+                : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-primary/10 hover:shadow-primary/20"
             )}
           >
             {option.label}
