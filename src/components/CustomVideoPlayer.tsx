@@ -607,6 +607,61 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
+  // Function to extract video data from video element for external URLs
+  const extractVideoFromElement = async (videoElement: HTMLVideoElement): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas context not available'));
+        return;
+      }
+      
+      canvas.width = videoElement.videoWidth;
+      canvas.height = videoElement.videoHeight;
+      
+      const stream = canvas.captureStream();
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const chunks: Blob[] = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        resolve(blob);
+      };
+      
+      mediaRecorder.onerror = (event) => {
+        reject(new Error('MediaRecorder error'));
+      };
+      
+      mediaRecorder.start();
+      
+      // Record the video by drawing frames to canvas
+      const fps = 30;
+      const interval = 1000 / fps;
+      let startTime = Date.now();
+      
+      const drawFrame = () => {
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        
+        if (Date.now() - startTime < videoElement.duration * 1000) {
+          setTimeout(drawFrame, interval);
+        } else {
+          mediaRecorder.stop();
+        }
+      };
+      
+      videoElement.currentTime = 0;
+      videoElement.play();
+      drawFrame();
+    });
+  };
+
   // Export function
   const handleExport = async () => {
     if (!src || isExporting) return;
@@ -627,9 +682,22 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         description: "Processing your video with padding and background..."
       });
       
-      // Fetch the video blob from the src
-      const response = await fetch(src);
-      const videoBlob = await response.blob();
+      // Get video blob - handle both blob URLs and external URLs
+      let videoBlob: Blob;
+      
+      if (src.startsWith('blob:')) {
+        // For blob URLs, use fetch (current working method)
+        console.log('Using fetch for blob URL');
+        const response = await fetch(src);
+        videoBlob = await response.blob();
+      } else {
+        // For external URLs, extract from video element to avoid CORS
+        console.log('Extracting video data from element for external URL');
+        if (!videoRef.current) {
+          throw new Error('Video element not available');
+        }
+        videoBlob = await extractVideoFromElement(videoRef.current);
+      }
       
       // Process video with only videoPadding and backgroundColor
       const processedBlob = await processVideo(
