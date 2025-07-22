@@ -9,6 +9,8 @@ import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
+import { VideoSegmentTimeline, VideoSegment } from './VideoSegmentTimeline';
+import { v4 as uuidv4 } from 'uuid';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -26,9 +28,13 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [trimStart, setTrimStart] = useState(0);
-  const [trimEnd, setTrimEnd] = useState(0);
+  // Video segments for split functionality
+  const [videoSegments, setVideoSegments] = useState<VideoSegment[]>([]);
   const [isDragging, setIsDragging] = useState<'start' | 'end' | 'scrub' | null>(null);
+  
+  // Legacy trim properties for backward compatibility
+  const trimStart = videoSegments.length > 0 ? Math.min(...videoSegments.map(s => s.startTime)) : 0;
+  const trimEnd = videoSegments.length > 0 ? Math.max(...videoSegments.map(s => s.endTime)) : duration;
   
   // Video display styling states
   const [videoPadding, setVideoPadding] = useState(0);
@@ -122,10 +128,16 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       console.log('Valid duration detected:', videoDuration, 'Has initialized trim:', hasInitializedTrim.current);
       setDuration(videoDuration);
       
-      if (!hasInitializedTrim.current) {
-        console.log('Setting initial trim values:', 0, 'to', videoDuration);
-        setTrimStart(0);
-        setTrimEnd(videoDuration);
+      if (!hasInitializedTrim.current && videoSegments.length === 0) {
+        console.log('Setting initial segment values:', 0, 'to', videoDuration);
+        const initialSegment: VideoSegment = {
+          id: uuidv4(),
+          startTime: 0,
+          endTime: videoDuration,
+          originalStart: 0,
+          originalEnd: videoDuration
+        };
+        setVideoSegments([initialSegment]);
         hasInitializedTrim.current = true;
       }
       
@@ -252,7 +264,12 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     if (isDragging === 'start') {
       const newTrimStart = Math.max(0, Math.min(time, trimEndRef.current - 0.5));
       console.log('Setting trimStart to:', newTrimStart);
-      setTrimStart(newTrimStart);
+      // Update first segment start time
+      if (videoSegments.length > 0) {
+        const updatedSegments = [...videoSegments];
+        updatedSegments[0] = { ...updatedSegments[0], startTime: newTrimStart, originalStart: newTrimStart };
+        setVideoSegments(updatedSegments);
+      }
       if (video) {
         video.currentTime = newTrimStart;
         setCurrentTime(newTrimStart);
@@ -260,7 +277,16 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
     } else if (isDragging === 'end') {
       const newTrimEnd = Math.min(durationRef.current, Math.max(time, trimStartRef.current + 0.5));
       console.log('Setting trimEnd to:', newTrimEnd);
-      setTrimEnd(newTrimEnd);
+      // Update last segment end time
+      if (videoSegments.length > 0) {
+        const updatedSegments = [...videoSegments];
+        updatedSegments[updatedSegments.length - 1] = { 
+          ...updatedSegments[updatedSegments.length - 1], 
+          endTime: newTrimEnd, 
+          originalEnd: newTrimEnd 
+        };
+        setVideoSegments(updatedSegments);
+      }
       if (video) {
         video.currentTime = newTrimEnd;
         setCurrentTime(newTrimEnd);
@@ -292,11 +318,64 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const resetTrim = () => {
     console.log('Resetting trim to full duration:', duration);
-    setTrimStart(0);
-    setTrimEnd(duration);
+    const initialSegment: VideoSegment = {
+      id: uuidv4(),
+      startTime: 0,
+      endTime: duration,
+      originalStart: 0,
+      originalEnd: duration
+    };
+    setVideoSegments([initialSegment]);
   };
 
   const getTrimmedDuration = () => trimEnd - trimStart;
+
+  // Video segment handlers
+  const handleSegmentsUpdate = (updatedSegments: VideoSegment[]) => {
+    setVideoSegments(updatedSegments);
+  };
+
+  const handleSegmentSplit = (segmentId: string, splitTime: number) => {
+    const segmentToSplit = videoSegments.find(s => s.id === segmentId);
+    if (!segmentToSplit || splitTime <= segmentToSplit.startTime || splitTime >= segmentToSplit.endTime) {
+      return;
+    }
+
+    const minDuration = 0.5; // Minimum 0.5 second duration
+    
+    // Ensure both resulting segments meet minimum duration
+    if (splitTime - segmentToSplit.startTime < minDuration || segmentToSplit.endTime - splitTime < minDuration) {
+      return;
+    }
+
+    const newSegments = videoSegments.flatMap(segment => {
+      if (segment.id !== segmentId) return segment;
+      
+      return [
+        {
+          ...segment,
+          id: uuidv4(),
+          endTime: splitTime,
+          originalEnd: splitTime
+        },
+        {
+          ...segment,
+          id: uuidv4(),
+          startTime: splitTime,
+          originalStart: splitTime
+        }
+      ];
+    });
+
+    setVideoSegments(newSegments);
+  };
+
+  const handleSegmentDelete = (segmentId: string) => {
+    if (videoSegments.length <= 1) return; // Don't delete the last segment
+    
+    const updatedSegments = videoSegments.filter(s => s.id !== segmentId);
+    setVideoSegments(updatedSegments);
+  };
 
   const handleCropMouseDown = (e: React.MouseEvent, type: typeof cropDragging) => {
     e.preventDefault();
@@ -1097,65 +1176,15 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             <span>{formatTime(trimEnd)}</span>
           </div>
           
-          <div 
-            ref={trimmerRef}
-            className="relative w-full h-12 bg-muted rounded-lg cursor-pointer select-none"
-            onMouseDown={(e) => {
-              const rect = trimmerRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              const x = e.clientX - rect.left;
-              const percentage = x / rect.width;
-              const time = percentage * duration;
-              
-              if (time >= trimStart && time <= trimEnd) {
-                handleTrimMouseDown(e, 'scrub');
-              }
-            }}
-          >
-            <div className="absolute inset-0 bg-muted-foreground/20 rounded-lg" />
-            
-            <div 
-              className="absolute top-0 bottom-0 bg-primary/30 border-t-2 border-b-2 border-primary"
-              style={{
-                left: `${(trimStart / duration) * 100}%`,
-                width: `${((trimEnd - trimStart) / duration) * 100}%`,
-              }}
-            />
-            
-            <div 
-              className="absolute top-0 bottom-0 w-0.5 bg-foreground z-10"
-              style={{
-                left: `${(currentTime / duration) * 100}%`,
-              }}
-            />
-            
-            <div 
-              className={cn(
-                "absolute top-0 bottom-0 w-3 bg-primary rounded-l-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
-                isDragging === 'start' && "bg-primary/80"
-              )}
-              style={{
-                left: `${(trimStart / duration) * 100}%`,
-              }}
-              onMouseDown={(e) => handleTrimMouseDown(e, 'start')}
-            >
-              <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
-            </div>
-            
-            <div 
-              className={cn(
-                "absolute top-0 bottom-0 w-3 bg-primary rounded-r-lg cursor-ew-resize z-20 hover:bg-primary/80 transition-colors",
-                isDragging === 'end' && "bg-primary/80"
-              )}
-              style={{
-                left: `${(trimEnd / duration) * 100}%`,
-                transform: 'translateX(-100%)',
-              }}
-              onMouseDown={(e) => handleTrimMouseDown(e, 'end')}
-            >
-              <div className="absolute inset-y-0 left-1/2 w-px bg-primary-foreground transform -translate-x-0.5" />
-            </div>
-          </div>
+          {/* Video Segment Timeline with Split Support */}
+          <VideoSegmentTimeline
+            segments={videoSegments}
+            duration={duration}
+            currentTime={currentTime}
+            onSegmentsUpdate={handleSegmentsUpdate}
+            onSegmentSplit={handleSegmentSplit}
+            onSegmentDelete={handleSegmentDelete}
+          />
           
           {/* Zoom Timelines */}
           {zoomEffects.length > 0 && (
