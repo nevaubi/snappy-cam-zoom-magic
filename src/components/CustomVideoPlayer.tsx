@@ -2,17 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus, Download } from 'lucide-react';
+import { Play, Pause, RotateCcw, Palette, Maximize, CornerDownLeft, Crop, Upload, Image as ImageIcon, Settings, ZoomIn, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import bgOceanWave from '@/assets/bg-ocean-wave.jpg';
 import bgLivingRoom from '@/assets/bg-living-room.jpg';
 import { ZoomTimeline, ZoomEffect } from './ZoomTimeline';
 import { ZoomPresets } from './ZoomPresets';
 import { ZoomGridSelector } from './ZoomGridSelector';
-import { useVideoProcessor } from '@/hooks/useVideoProcessor';
-import { useToast } from '@/hooks/use-toast';
-import { useScreenRecording } from '@/hooks/useScreenRecording';
-import type { QualityPreset } from '@/hooks/useScreenRecording';
 
 interface CustomVideoPlayerProps {
   src: string;
@@ -74,26 +70,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   // Track processed zoom effects to prevent duplicate updates
   const lastProcessedZoomRef = useRef<string | null>(null);
   const zoomOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Export states
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState(0);
-  const [exportQuality, setExportQuality] = useState<QualityPreset>('high');
-  const { processVideo } = useVideoProcessor();
-  const { toast } = useToast();
-  
-  // Screen recording for export
-  const {
-    isRecording,
-    recordedBlob,
-    error: recordingError,
-    startRecording,
-    stopRecording,
-    downloadRecording
-  } = useScreenRecording();
-  
-  // Video container ref for screen recording
-  const videoContainerRef = useRef<HTMLDivElement>(null);
   
   // Background color presets
   const colorPresets = [
@@ -623,81 +599,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
-  // Screen recording export function
-  const handleExport = async () => {
-    if (!videoContainerRef.current || isExporting || isRecording) return;
-    
-    setIsExporting(true);
-    
-    try {
-      toast({
-        title: "Export Started",
-        description: "Recording video with all effects applied..."
-      });
-      
-      // Reset video to trimmed start for recording
-      if (videoRef.current) {
-        videoRef.current.currentTime = trimStart;
-        setCurrentTime(trimStart);
-      }
-      
-      // Start screen recording of the video container
-      await startRecording(videoContainerRef.current, exportQuality);
-      
-      // Play the video for the trimmed duration
-      if (videoRef.current) {
-        await videoRef.current.play();
-        setIsPlaying(true);
-        
-        // Calculate recording duration based on trim settings
-        const recordingDuration = trimEnd > trimStart ? (trimEnd - trimStart) : duration;
-        
-        // Stop recording after the trimmed duration
-        setTimeout(() => {
-          stopRecording();
-          if (videoRef.current) {
-            videoRef.current.pause();
-            setIsPlaying(false);
-          }
-        }, recordingDuration * 1000);
-      }
-      
-    } catch (error) {
-      console.error('Export failed:', error);
-      toast({
-        title: "Export Failed",
-        description: error instanceof Error ? error.message : "An error occurred during export",
-        variant: "destructive"
-      });
-      setIsExporting(false);
-    }
-  };
-  
-  // Handle download when recording is complete
-  useEffect(() => {
-    if (recordedBlob && isExporting) {
-      downloadRecording(`edited-video-${Date.now()}`);
-      setIsExporting(false);
-      
-      toast({
-        title: "Export Complete!",
-        description: "Your video has been recorded and downloaded."
-      });
-    }
-  }, [recordedBlob, isExporting, downloadRecording]);
-  
-  // Handle recording errors
-  useEffect(() => {
-    if (recordingError && isExporting) {
-      toast({
-        title: "Recording Failed",
-        description: recordingError,
-        variant: "destructive"
-      });
-      setIsExporting(false);
-    }
-  }, [recordingError, isExporting]);
-
   return (
     <div className={cn("space-y-6", className)}>
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
@@ -705,7 +606,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         {/* Left Column - Video Player (75%) */}
         <div className="lg:col-span-3">
           <div 
-            ref={videoContainerRef}
             className="relative rounded-lg overflow-hidden aspect-video flex items-center justify-center transition-all duration-300"
             style={{
               ...(backgroundType === 'color' 
@@ -1187,29 +1087,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset Trim
         </Button>
-
-        <div className="ml-auto flex items-center gap-2">
-          <select 
-            value={exportQuality}
-            onChange={(e) => setExportQuality(e.target.value as QualityPreset)}
-            className="px-2 py-1 border border-input rounded text-xs bg-background"
-            disabled={isExporting}
-          >
-            <option value="standard">Standard (720p)</option>
-            <option value="high">High (1080p)</option>
-            <option value="ultra">Ultra (1440p)</option>
-          </select>
-          
-          <Button
-            onClick={handleExport}
-            variant="default"
-            size="sm"
-            disabled={isExporting || isRecording || !src}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            {isExporting ? 'Recording...' : 'Export Video'}
-          </Button>
-        </div>
       </div>
 
       {duration > 0 && (
