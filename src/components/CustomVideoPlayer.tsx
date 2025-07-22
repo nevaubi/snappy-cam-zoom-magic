@@ -633,15 +633,23 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
                   className="relative overflow-hidden"
                   style={{
                     borderRadius: `${videoCornerRadius}px`,
+                    width: videoRef.current ? `${videoRef.current.videoWidth * (cropSettings.height / 100)}px` : '100%',
+                    height: videoRef.current ? `${videoRef.current.videoHeight * (cropSettings.height / 100)}px` : '100%',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
                   }}
                 >
                   <video
                     ref={videoRef}
                     src={src}
                     crossOrigin="anonymous"
-                    className="max-w-full max-h-full"
+                    className="max-w-none max-h-none"
                     style={{
-                      clipPath: getClipPath(),
+                      width: videoRef.current ? `${videoRef.current.videoWidth}px` : '100%',
+                      height: videoRef.current ? `${videoRef.current.videoHeight}px` : '100%',
+                      left: `-${cropSettings.x}%`,
+                      top: `-${cropSettings.y}%`,
+                      position: 'relative',
                       transform: currentZoom !== 1 ? `scale(${currentZoom})` : 'none',
                       transformOrigin: `${Math.max(10, Math.min(90, (currentZoomTarget.x / 7) * 100))}% ${Math.max(10, Math.min(90, (currentZoomTarget.y / 7) * 100))}%`,
                       transition: `transform ${
