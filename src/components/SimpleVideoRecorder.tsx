@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { Play, Square, Download, Settings, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { Play, Square, Download, Settings, Upload, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { CustomVideoPlayer } from './CustomVideoPlayer';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -53,6 +53,7 @@ interface SimpleVideoRecorderProps {
 }
 
 const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) => {
+  const [showRightPanels, setShowRightPanels] = useState(true);
   const { user } = useAuth();
   const [isRecording, setIsRecording] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string>('');
@@ -243,48 +244,14 @@ const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) 
     <div className="min-h-screen bg-background p-4">
       <div className="mx-4 md:mx-8 lg:mx-12 xl:mx-16 space-y-6">
         <Card className="p-6">
-          <h1 className="text-2xl font-bold mb-6">Screen Recorder</h1>
-          
-          {error && (
-            <div className="bg-destructive/10 text-destructive p-3 rounded-md mb-4">
-              {error}
-            </div>
-          )}
-
-          {/* Quality Settings */}
-          <div className="mb-6">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4" />
-                <span className="text-sm font-medium">Quality:</span>
-              </div>
-              <Select value={quality} onValueChange={(value: QualityPreset) => setQuality(value)} disabled={isRecording}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(QUALITY_PRESETS).map(([key, config]) => (
-                    <SelectItem key={key} value={key}>
-                      {config.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Header Row with Controls */}
+          <div className="flex items-center gap-4 mb-6 flex-wrap">
+            <h1 className="text-2xl font-bold">Screen Recorder</h1>
             
-            <div className="text-xs text-muted-foreground space-y-1">
-              <div>Resolution: {currentConfig.resolution.width}×{currentConfig.resolution.height} @ {currentConfig.frameRate}fps</div>
-              <div>Video: {(currentConfig.videoBitsPerSecond / 1000000).toFixed(1)} Mbps | Audio: {(currentConfig.audioBitsPerSecond / 1000).toFixed(0)} kbps</div>
-              <div>Estimated file size: ~{estimatedSizeMB} MB per minute</div>
-            </div>
-          </div>
-
-          {/* Recording Controls */}
-          <div className="flex gap-4 mb-6">
             <Button
               onClick={isRecording ? stopRecording : startRecording}
               variant={isRecording ? "destructive" : "default"}
-              size="lg"
+              size="default"
             >
               {isRecording ? (
                 <>
@@ -299,13 +266,47 @@ const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) 
               )}
             </Button>
 
+            <Select value={quality} onValueChange={(value: QualityPreset) => setQuality(value)} disabled={isRecording}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(QUALITY_PRESETS).map(([key, config]) => (
+                  <SelectItem key={key} value={key}>
+                    {config.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             {recordedVideoUrl && (
               <Button onClick={downloadVideo} variant="outline">
                 <Download className="w-4 h-4 mr-2" />
                 Download ({quality.toUpperCase()})
               </Button>
             )}
+
+            <Button
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                setShowRightPanels(!showRightPanels);
+                if (!showRightPanels && onCloseSidebar) {
+                  onCloseSidebar();
+                }
+              }}
+              className="ml-auto"
+            >
+              {showRightPanels ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+              {showRightPanels ? 'Hide panels' : 'Show panels'}
+            </Button>
           </div>
+          
+          {error && (
+            <div className="bg-destructive/10 text-destructive p-3 rounded-md mb-4">
+              {error}
+            </div>
+          )}
 
           {/* Upload Progress */}
           {isUploading && (
@@ -325,7 +326,12 @@ const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) 
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <h3 className="text-sm font-medium">Cloud Video Ready</h3>
               </div>
-              <CustomVideoPlayer src={supabaseVideoUrl} className="w-full" onCloseSidebar={onCloseSidebar} />
+              <CustomVideoPlayer 
+                src={supabaseVideoUrl} 
+                className="w-full" 
+                onCloseSidebar={onCloseSidebar}
+                showRightPanels={showRightPanels}
+              />
             </div>
           ) : recordedVideoUrl && !isUploading ? (
             <div className="space-y-2">
@@ -333,7 +339,12 @@ const SimpleVideoRecorder = ({ onCloseSidebar }: SimpleVideoRecorderProps = {}) 
                 <AlertCircle className="w-4 h-4 text-yellow-500" />
                 <h3 className="text-sm font-medium">Local Video (Upload Failed)</h3>
               </div>
-              <CustomVideoPlayer src={recordedVideoUrl} className="w-full" onCloseSidebar={onCloseSidebar} />
+              <CustomVideoPlayer 
+                src={recordedVideoUrl} 
+                className="w-full" 
+                onCloseSidebar={onCloseSidebar}
+                showRightPanels={showRightPanels}
+              />
             </div>
           ) : null}
 

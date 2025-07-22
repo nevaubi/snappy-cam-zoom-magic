@@ -15,13 +15,15 @@ interface CustomVideoPlayerProps {
   className?: string;
   onDurationLoad?: (duration: number) => void;
   onCloseSidebar?: () => void;
+  showRightPanels?: boolean;
 }
 
 export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ 
   src, 
   className, 
   onDurationLoad,
-  onCloseSidebar
+  onCloseSidebar,
+  showRightPanels = true
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trimmerRef = useRef<HTMLDivElement>(null);
@@ -73,8 +75,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   const lastProcessedZoomRef = useRef<string | null>(null);
   const zoomOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Focus mode state
-  const [showRightPanels, setShowRightPanels] = useState(true);
   
   // Background color presets
   const colorPresets = [
@@ -604,16 +604,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
 
   const selectedZoom = selectedZoomId ? zoomEffects.find(z => z.id === selectedZoomId) : null;
 
-  const toggleFocusMode = () => {
-    const newShowPanels = !showRightPanels;
-    setShowRightPanels(newShowPanels);
-    
-    // Close sidebar when hiding panels
-    if (!newShowPanels && onCloseSidebar) {
-      onCloseSidebar();
-    }
-  };
-
   return (
     <div className={cn("space-y-6", className)}>
       {/* Main layout: Video player (75%) + Editing controls (25%) */}
@@ -749,16 +739,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         {/* Right Column - Tabbed Editing Controls Sidebar (25%) */}
         {showRightPanels && (
           <div className="lg:col-span-1">
-            {/* Focus Mode Toggle Button */}
-            <div className="mb-4 flex items-center justify-end">
-              <button
-                onClick={toggleFocusMode}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors bg-background/80 hover:bg-muted/50 border border-border rounded-lg"
-              >
-                <EyeOff className="h-4 w-4" />
-                <span>Hide panels</span>
-              </button>
-            </div>
             <div className="bg-card/50 border border-border rounded-lg p-4 shadow-sm">
             <Tabs defaultValue="display" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4">
@@ -1050,18 +1030,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           </div>
         )}
         
-        {/* Show Panels Button - Only visible when panels are hidden */}
-        {!showRightPanels && (
-          <div className="fixed top-20 right-4 z-10">
-            <button
-              onClick={toggleFocusMode}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors bg-background/90 hover:bg-muted/50 border border-border rounded-lg shadow-lg backdrop-blur-sm"
-            >
-              <Eye className="h-4 w-4" />
-              <span>Show panels</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Bottom Section - Full-width Progress Bar */}
